@@ -45,31 +45,76 @@ OpenDoge_train/
 └── LICENSE
 ```
 
-## 环境安装
+## 快速启动
 
-系统要求：Ubuntu 20.04 LTS，CUDA 12.1
+### 1. 创建 conda 环境
 
 ```bash
-# 安装 CUDA
-wget https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda_12.1.0_530.30.02_linux.run
-sudo sh cuda_12.1.0_530.30.02_linux.run
-
-# 安装 Miniconda
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-chmod +x Miniconda3-latest-Linux-x86_64.sh
-./Miniconda3-latest-Linux-x86_64.sh
+# Python 3.8 + PyTorch 2.3.1 + CUDA 12.1 + MuJoCo
+conda create -n himloco python=3.8
+conda activate himloco
+pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+pip install mujoco==3.2.3
 ```
 
-Conda 环境依赖见 `setup.py` 中的 `install_requires`，核心包包括：
+### 2. 安装 Isaac Gym
 
-- `torch` (CUDA 12.1)
-- `isaacgym` (需手动安装)
-- `mujoco==3.2.3`
-- `onnxruntime`
-- `tensorboard`
-- `rsl_rl`
+从 [NVIDIA 官网](https://developer.nvidia.com/isaac-gym) 下载 Isaac Gym Preview 4，解压后安装：
 
-Isaac Gym 需要从 [NVIDIA 官网](https://developer.nvidia.com/isaac-gym) 单独下载安装。
+```bash
+conda activate himloco
+pip install -e <isaacgym_path>/isaacgym/python
+```
+
+### 3. 配置环境变量
+
+Isaac Gym 需要 `libpython3.8.so` 和自身 lib 目录。创建 activate hook 使变量仅在 `himloco` 环境生效：
+
+```bash
+mkdir -p ${CONDA_PREFIX}/etc/conda/activate.d
+cat > ${CONDA_PREFIX}/etc/conda/activate.d/env_vars.sh << 'EOF'
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:<isaacgym_path>/isaacgym/lib:$LD_LIBRARY_PATH
+EOF
+```
+
+> 替换 `<isaacgym_path>` 为 Isaac Gym 的实际路径，例如 `/home/lain/IsaacGym_Preview_4_Package`。
+
+### 4. 安装项目依赖
+
+```bash
+conda activate himloco
+cd OpenDoge_train
+pip install -e .
+```
+
+## 环境检查
+
+```bash
+conda activate himloco
+python -c "
+import isaacgym
+print(f'IsaacGym:               ok')
+
+import torch
+print(f'PyTorch CUDA available: {torch.cuda.is_available()}')
+print(f'PyTorch CUDA version:   {torch.version.cuda}')
+
+import mujoco
+print(f'MuJoCo:                 {mujoco.__version__}')
+
+print('===== 环境就绪 =====')
+"
+```
+
+预期输出：
+
+```
+IsaacGym:               ok
+PyTorch CUDA available: True
+PyTorch CUDA version:   12.1
+MuJoCo:                 3.2.3
+===== 环境就绪 =====
+```
 
 ## 使用指南
 

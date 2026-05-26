@@ -1,0 +1,27 @@
+name: himloco
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch=2.3.1=py3.8_cuda12.1_cudnn8.9.2_0
+  - torchvision=0.18.1=py38_cu121
+  - torchaudio=2.3.1=py38_cu121
+  - pytorch-cuda=12.1
+  - cuda-runtime=12.1
+  - numpy=1.24
+  - scipy=1.10
+  - pyyaml=6.0
+  - matplotlib=3.7
+  - tensorboard=2.14
+  - pip
+  - setuptools
+  - pip:
+      - mujoco==3.2.3
+      - onnxruntime-gpu>=1.14
+      - pygame>=2.0
+      - pynput>=1.7
+      - trimesh>=3.9
+      - ninja
