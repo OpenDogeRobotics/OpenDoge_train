@@ -110,30 +110,30 @@ class OpendogeCfg(LeggedRobotCfg):
     # ==========================
     class domain_rand(LeggedRobotCfg.domain_rand):
         randomize_friction = True
-        friction_range = [0.5, 1.25] # 地面摩擦力随机范围
+        friction_range = [0.3, 1.5] # 扩大摩擦范围，增强鲁棒性
 
-        randomize_base_mass = False
-        added_mass_range = [-0.1, 0.3] # 负载范围
+        randomize_base_mass = True
+        added_mass_range = [-0.15, 0.35] # 负载随机化（模拟不同负载）
         
         push_robots = True # 随机推力 — 精炼期开启，训练抗扰能力
-        push_interval_s = 15
-        max_push_vel_xy = 0.5
+        push_interval_s = 10
+        max_push_vel_xy = 0.8
         
         # randomize_motor_offset = True
         # motor_offset_range = [-0.05, 0.05] # 模拟电机零点偏移误差 (±5度)
         randomize_motor_strength = True
-        motor_strength_range = [0.9, 1.1] # 模拟电机力矩输出误差 (±10%)
+        motor_strength_range = [0.85, 1.15] # 扩大电机力矩误差范围
         
         # 关节 PD 参数随机化
         randomize_kp = True
-        kp_range = [0.8, 1.2]
+        kp_range = [0.7, 1.3]
         randomize_kd = True
-        kd_range = [0.8, 1.2]
+        kd_range = [0.7, 1.3]
         
-        # 外力干扰 (Disturbance) — 阶段一关闭，步态形成后开启
-        disturbance = False
-        disturbance_range = [-2.0, 2.0] 
-        disturbance_interval = 8
+        # 外力干扰 (Disturbance) — 精炼期开启，增强抗扰鲁棒性
+        disturbance = True
+        disturbance_range = [-3.0, 3.0]
+        disturbance_interval = 6
         
         # 延迟随机化 (模拟通信/计算延迟) — 阶段一关闭
         delay = False
