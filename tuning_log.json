@@ -44,6 +44,83 @@
     "actual_effect": "feet_air_time still stuck at -0.023. Smoothness improved but gait not emerged. Root cause identified as 0.5s offset in reward function code."
   },
   {
+    "timestamp": "2026-05-27T12:55:00",
+    "checkpoint_step": 4200,
+    "run_dir": "May27_11-31-05_opendoge_himloco_v1.0",
+    "diagnosis": "Gen 5: feet_air_time negative, smoothness 4.8 (degraded from Gen 3's 2.7), velocity ranges saturated. Need longer strides + stability + flexibility.",
+    "changes": {
+      "feet_air_time": "0.50 -> 1.00",
+      "clearance_height_target": "-0.135 -> -0.110",
+      "action_scale": "0.25 -> 0.30",
+      "dof_acc": "-1e-6 -> -3e-6",
+      "smoothness": "-0.03 -> -0.06",
+      "ang_vel_xy": "-0.08 -> -0.15",
+      "lin_vel_z": "-2.0 -> -3.0",
+      "orientation": "-2.0 -> -3.0",
+      "lin_vel_x": "[-4,4] -> [-5,5]",
+      "lin_vel_y": "[-2.5,2.5] -> [-3.5,3.5]",
+      "ang_vel_yaw": "[-2,2] -> [-3,3]",
+      "resampling_time": "5 -> 3",
+      "max_iterations": "3000 -> 6000"
+    },
+    "expected_effect": "Longer strides via higher foot lift + bigger action scale, smoother gait via 2-3x stability penalties, wider operating envelope. Target: smoothness approaching 2.7, tracking maintained >0.87.",
+    "actual_effect": "FAILED. tracking_lin_vel collapsed -55% (0.668→0.300 raw). Stability penalties too aggressive — policy chose minimal movement. feet_air_time unchanged (threshold 0.2s still unreachable for 0.24m legs). smoothness actually worsened (4.93→5.97). dof_acc improved 63% (304k→112k). Root cause: 0.2s threshold + 3x stability overload."
+  },
+  {
+    "timestamp": "2026-05-27T13:15:00",
+    "checkpoint_step": 4200,
+    "run_dir": "May27_11-31-05_opendoge_himloco_v1.0",
+    "diagnosis": "Gen 5 stability overload killed tracking. Root causes: (1) feet_air_time 0.2s threshold unreachable for 0.24m legs — code-level fix needed, not weight tuning. (2) 2-3x stability penalties caused policy to minimize movement. (3) PD stiffness=10 too soft for aggressive strides.",
+    "changes": {
+      "feet_air_time_threshold": "0.2 -> 0.10 (in legged_robot.py)",
+      "stiffness": "10.0 -> 12.0",
+      "dof_acc": "-3e-6 -> -2e-6",
+      "smoothness": "-0.06 -> -0.04",
+      "ang_vel_xy": "-0.15 -> -0.10",
+      "lin_vel_z": "-3.0 -> -2.5",
+      "orientation": "-3.0 -> -2.5",
+      "lin_vel_x": "[-5,5] -> [-4.5,4.5]",
+      "lin_vel_y": "[-3.5,3.5] -> [-3,3]",
+      "ang_vel_yaw": "[-3,3] -> [-2.5,2.5]"
+    },
+    "expected_effect": "Threshold fix is the critical change — 0.10s achievable for 0.24m legs, feet_air_time should turn positive. Stability penalties dialed back to 1.25-2x Gen 4. PD stiffness +20% for more responsive joints. Target: tracking_lin_vel >0.55 raw, feet_air_time >0, smoothness <4.5.",
+    "actual_effect": "PARTIAL. feet_air_time stayed positive (+0.003) — threshold fix validated. episode_length consistently >1900. But smoothness oscillated (crash1@4995:-1.45, crash2@6569:-0.69, crash3@7377:-1.26). Pattern matches CLAUDE.md Mode 5 'repeated crashes'. num_steps_per_env=48 insufficient for task complexity. Intervention: increase num_steps_per_env 48→72, reduce lr 1e-3→5e-4."
+  },
+  {
+    "timestamp": "2026-05-27T15:20:00",
+    "checkpoint_step": 7200,
+    "run_dir": "May27_14-55-43_opendoge_himloco_v1.0",
+    "diagnosis": "Periodic smoothness oscillation (3 crashes in 2800 steps). PPO update variance too high for current task complexity (wide vel ranges + high PD stiffness). num_steps_per_env=48 too small.",
+    "changes": {
+      "num_steps_per_env": "48 -> 72",
+      "learning_rate": "1e-3 -> 5e-4"
+    },
+    "expected_effect": "Larger batch (72*4096=295k samples/update vs 197k) for more stable gradients. Lower lr prevents overshoot. Oscillation amplitude should decrease.",
+    "actual_effect": "FAILED. num_steps=72 too large — update frequency dropped 33%, policy adapted too slowly with checkpoint's low lr. mean_reward -18→-31, smoothness -1.5→-2.0 over 500 iters. episode_length held 1907 (survival intact). Reverted to 48."
+  },
+  {
+    "timestamp": "2026-05-27T16:02:00",
+    "checkpoint_step": 4200,
+    "run_dir": "May27_11-31-05_opendoge_himloco_v1.0",
+    "diagnosis": "num_steps=72 experiment failed. Root cause of oscillation was lr=1e-3 not batch size. Reverting num_steps to 48, keeping lr=5e-4.",
+    "changes": {
+      "num_steps_per_env": "72 -> 48 (revert)"
+    },
+    "expected_effect": "Restore faster update frequency with lower lr. Should adapt faster than 72, oscillate less than original 48+lr1e-3.",
+    "actual_effect": "PEAK EXCELLENT then COLLAPSE. Step 5400-6600: all stability metrics beat Gen 4, feet_air_time positive, smoothness 2.55 (vs Gen4 4.93), tracking_ang 0.86 (same as Gen4). But after step 6600, full 4.5 m/s range caused catastrophic collapse (ep_len 1988→1325, smoothness -0.10→-4.29). 48+lr=5e-4 confirmed correct; the issue was forward speed range too high for 0.24m legs."
+  },
+  {
+    "timestamp": "2026-05-28T09:00:00",
+    "checkpoint_step": 6000,
+    "run_dir": "May27_16-13-04_opendoge_himloco_v1.0",
+    "diagnosis": "Gen 5.1 peaked at step 5400-6600 then collapsed when lin_vel_x reached 4.5 m/s. 4.5 m/s too fast for 0.24m legs. Cap lin_vel_x at Gen 4 level (4.0) while keeping all stability + lateral/turning improvements.",
+    "changes": {
+      "lin_vel_x": "[-4.5, 4.5] -> [-4.0, 4.0]"
+    },
+    "expected_effect": "Peak stability metrics (smoothness 2.55, feet_air_time +0.003, tracking_ang 0.86) sustained at 4.0 m/s range. tracking_lin should recover to 0.85+ without late-training collapse.",
+    "actual_effect": null
+  },
+  {
     "timestamp": "2026-05-27T02:35:00",
     "checkpoint_step": 0,
     "run_dir": "new_run_from_scratch_v4",

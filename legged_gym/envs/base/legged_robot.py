@@ -1212,7 +1212,7 @@ class LeggedRobot(BaseTask):
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.) * contact_filt
         self.feet_air_time += self.dt
-        rew_airTime = torch.sum((self.feet_air_time - 0.2) * first_contact, dim=1) # reward only on first contact with the ground (0.2s threshold for OpenDoge size)
+        rew_airTime = torch.sum((self.feet_air_time - 0.10) * first_contact, dim=1) # reward only on first contact with the ground (0.10s threshold for OpenDoge size - 0.24m legs)
         rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.3 #no reward for zero command
         self.feet_air_time *= ~contact_filt
         return rew_airTime

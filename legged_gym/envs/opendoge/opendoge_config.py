@@ -66,9 +66,9 @@ class OpendogeCfg(LeggedRobotCfg):
     # ==========================
     class control(LeggedRobotCfg.control):
         control_type = 'P'          # 位置控制 (PD Controller)
-        stiffness = {'joint': 10.0}   # PD参数保留
+        stiffness = {'joint': 12.0}   # 提升刚度让关节响应更快，配合大步幅
         damping = {'joint': 0.5}     # 增加阻尼，动作更柔顺自然     
-        action_scale = 0.25          # 动作缩放：网络输出通常在 [-1, 1]，乘上 0.25 后变为目标关节弧度
+        action_scale = 0.30          # 动作缩放：网络输出通常在 [-1, 1]，乘上 0.30 后变为目标关节弧度
         decimation = 2              # 控制频率设置 物理引擎 dt = 0.005 (200Hz) -> 控制频率 = 200 / 2 = 100Hz
 
     # ==========================
@@ -78,12 +78,12 @@ class OpendogeCfg(LeggedRobotCfg):
         curriculum = True # 开启课程学习
         max_curriculum = 1.0
         num_commands = 4  # x vel, y vel, yaw vel, heading
-        resampling_time = 5. # 更频繁切换指令方向，增强全向能力
+        resampling_time = 3. # 更频繁切换指令方向，增强全向灵活性和步态节奏
         heading_command = True # 是否使用朝向指令
         class ranges(LeggedRobotCfg.commands.ranges):
-                lin_vel_x = [-4.0, 4.0] # min max [m/s]
-                lin_vel_y = [-2.5, 2.5]   # 侧向速度范围（中位值，平衡全向与稳定）
-                ang_vel_yaw = [-2.0, 2.0]    # 转向速度范围（中位值）
+                lin_vel_x = [-4.0, 4.0] # min max [m/s] — 回收至Gen4水平，4.5对0.24m腿过高
+                lin_vel_y = [-3.0, 3.0]   # 侧向速度范围（平衡全向与稳定）
+                ang_vel_yaw = [-2.5, 2.5]    # 转向速度范围（增强转向灵活性）
                 heading = [-3.14, 3.14]
 
     # ==========================
@@ -145,17 +145,17 @@ class OpendogeCfg(LeggedRobotCfg):
         soft_dof_pos_limit = 0.9
         tracking_sigma = 0.22 # 追踪奖励精度（0.2过激导致振荡）
         base_height_target = 0.185
-        clearance_height_target = -0.135  # 目标脚部离地高度（身体坐标系） 身体高度+clearance_height_target=抬高
+        clearance_height_target = -0.110  # 目标脚部离地高度（身体坐标系）抬高2.5cm增大步幅
     
         class scales(LeggedRobotCfg.rewards.scales):
 
             termination = -0.0              # 终止条件惩罚
             tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡)
             tracking_ang_vel = 1.0          # 追踪角速度奖励（增强转向精度）
-            lin_vel_z = -2.0                # 垂直速度惩罚（防止机器人向上跳）
-            ang_vel_xy = -0.08              # 水平角速度惩罚（减少机身摇晃）
-            orientation = -2.0             # 机身方向惩罚（保持机身水平）
-            dof_acc = -1e-6                 # 关节加速度惩罚（平滑运动）
+            lin_vel_z = -2.5                # 垂直速度惩罚（防止机器人向上跳）
+            ang_vel_xy = -0.10              # 水平角速度惩罚（减少机身摇晃）
+            orientation = -2.5             # 机身方向惩罚（保持机身水平）
+            dof_acc = -2e-6                 # 关节加速度惩罚（平滑运动，2x增强）
             joint_power = -2e-5             # 关节功率惩罚（节省能量）
 
             base_height = -1.5              # 高度保持惩罚（精准维持目标高度）
@@ -166,8 +166,8 @@ class OpendogeCfg(LeggedRobotCfg):
 
             foot_clearance = -0.0          # 脚部高度惩罚（防止拖脚）
             action_rate = -0.02             # 动作变化率惩罚（控制平滑过渡）
-            smoothness = -0.03              # 平滑度惩罚（流畅运动）
-            feet_air_time = 0.50             # 脚离地时间奖励（鼓励摆动腿抬起，10x原始值）
+            smoothness = -0.04              # 平滑度惩罚（流畅运动，适度增强）
+            feet_air_time = 1.00             # 脚离地时间奖励（鼓励长步幅抬腿，2x全向版）
             feet_stumble = -0.0             # 脚绊倒惩罚（暂不使用）
             stand_still = -2.0               # 静止状态惩罚（零指令时安静站姿）
             torques = -0.0                  # 扭矩惩罚（暂不使用）
@@ -231,18 +231,18 @@ class OpendogeCfg(LeggedRobotCfg):
 class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
         entropy_coef = 0.005  # 精炼期降低探索
-        learning_rate = 1e-3 # 降低一点学习率
+        learning_rate = 5e-4 # 降低稳定训练
 
     class runner(LeggedRobotCfgPPO.runner):
         run_name = 'opendoge_himloco_v1.0'
         experiment_name = 'flat_opendoge'
-        max_iterations = 3000 # 最大训练迭代次数
+        max_iterations = 6000 # 最大训练迭代次数
         save_interval = 300 # 每 300 次迭代保存一次模型
 
         # HimLoco核心配置
         policy_class_name = 'HIMActorCritic' 
         algorithm_class_name = 'HIMPPO'    
-        num_steps_per_env = 48
+        num_steps_per_env = 48  # 恢复48，72对此任务过大导致适应过慢
 
 
 
