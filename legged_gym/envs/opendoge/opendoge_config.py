@@ -78,12 +78,12 @@ class OpendogeCfg(LeggedRobotCfg):
         curriculum = True # 开启课程学习
         max_curriculum = 1.0
         num_commands = 4  # x vel, y vel, yaw vel, heading
-        resampling_time = 10. # 每 10 秒重新采样一次指令
+        resampling_time = 5. # 更频繁切换指令方向，增强全向能力
         heading_command = True # 是否使用朝向指令
         class ranges(LeggedRobotCfg.commands.ranges):
                 lin_vel_x = [-4.0, 4.0] # min max [m/s]
-                lin_vel_y = [-2.0, 2.0]   # min max [m/s]
-                ang_vel_yaw = [-1.56, 1.56]    # min max [rad/s]
+                lin_vel_y = [-2.5, 2.5]   # 侧向速度范围（中位值，平衡全向与稳定）
+                ang_vel_yaw = [-2.0, 2.0]    # 转向速度范围（中位值）
                 heading = [-3.14, 3.14]
 
     # ==========================
@@ -143,14 +143,15 @@ class OpendogeCfg(LeggedRobotCfg):
     # ==========================
     class rewards(LeggedRobotCfg.rewards):
         soft_dof_pos_limit = 0.9
+        tracking_sigma = 0.22 # 追踪奖励精度（0.2过激导致振荡）
         base_height_target = 0.185
         clearance_height_target = -0.135  # 目标脚部离地高度（身体坐标系） 身体高度+clearance_height_target=抬高
     
         class scales(LeggedRobotCfg.rewards.scales):
 
             termination = -0.0              # 终止条件惩罚
-            tracking_lin_vel = 1.5          # 追踪线速度奖励 (削半，降低主导)
-            tracking_ang_vel = 0.5          # 追踪角速度奖励
+            tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡)
+            tracking_ang_vel = 1.0          # 追踪角速度奖励（增强转向精度）
             lin_vel_z = -2.0                # 垂直速度惩罚（防止机器人向上跳）
             ang_vel_xy = -0.08              # 水平角速度惩罚（减少机身摇晃）
             orientation = -2.0             # 机身方向惩罚（保持机身水平）
