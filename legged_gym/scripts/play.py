@@ -213,7 +213,7 @@ def play(args, x_vel=0.3, y_vel=0.0, yaw_vel=0.0):
 
 if __name__ == '__main__':
     EXPORT_POLICY = True
-    EXPORT_ONNX = True
+    EXPORT_ONNX = False
     RECORD_FRAMES = False
     MOVE_CAMERA = False
     args = get_args()

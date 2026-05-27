@@ -1,0 +1,58 @@
+[
+  {
+    "timestamp": "2026-05-27T01:50:00",
+    "checkpoint_step": 0,
+    "run_dir": "May27_01-45-57_opendoge_himloco_v1.0",
+    "diagnosis": "Previous run converged to shuffling",
+    "changes": {
+      "feet_air_time": "0.05 -> 0.20",
+      "smoothness": "-0.01 -> -0.03",
+      "dof_acc": "-2.5e-7 -> -1e-6",
+      "disturbance": "True -> False",
+      "delay": "True -> False",
+      "push_robots": "True -> False"
+    },
+    "expected_effect": "Encourage foot clearance, suppress vibration",
+    "actual_effect": "feet_air_time stuck at -0.010. Shuffling persisted. Root cause later identified as 0.5s threshold in reward function."
+  },
+  {
+    "timestamp": "2026-05-27T02:00:00",
+    "checkpoint_step": 1200,
+    "run_dir": "May27_02-05-15_opendoge_himloco_v1.0",
+    "diagnosis": "feet_air_time stalled. Tried friction reduction.",
+    "changes": {
+      "static_friction": "1.0 -> 0.3",
+      "dynamic_friction": "1.0 -> 0.2",
+      "randomize_friction": "True -> False"
+    },
+    "expected_effect": "Low friction makes shuffling ineffective",
+    "actual_effect": "No improvement. Smoothness worsened. Failed approach."
+  },
+  {
+    "timestamp": "2026-05-27T02:14:00",
+    "checkpoint_step": 1200,
+    "run_dir": "May27_02-15-35_opendoge_himloco_v1.0",
+    "diagnosis": "Low friction failed. Root cause: reward imbalance (tracking 15x feet_air).",
+    "changes": {
+      "tracking_lin_vel": "3.0 -> 1.5",
+      "feet_air_time": "0.20 -> 0.50",
+      "static_friction": "0.3 -> 1.0",
+      "dynamic_friction": "0.2 -> 1.0",
+      "randomize_friction": "False -> True"
+    },
+    "expected_effect": "tracking/feet_air ratio from 15:1 to 3:1",
+    "actual_effect": "feet_air_time still stuck at -0.023. Smoothness improved but gait not emerged. Root cause identified as 0.5s offset in reward function code."
+  },
+  {
+    "timestamp": "2026-05-27T02:35:00",
+    "checkpoint_step": 0,
+    "run_dir": "new_run_from_scratch_v4",
+    "diagnosis": "ROOT CAUSE: _reward_feet_air_time has (feet_air_time - 0.5) offset. 0.5s threshold unreachable for OpenDoge (leg 0.24m, swing phase 0.15-0.25s). All weight tuning was treating symptoms.",
+    "changes": {
+      "feet_air_time_threshold": "0.5 -> 0.2 (in legged_robot.py)",
+      "command_threshold": "0.5 -> 0.3 (in legged_robot.py)"
+    },
+    "expected_effect": "0.2s threshold achievable. Current ~0.45s air time yields +0.25 positive reward per foot. Virtuous cycle for foot lifting.",
+    "actual_effect": "SUCCESS. Final raw smoothness 4.9x better (5.63 vs 27.79), dof_acc 2.1x better (403k vs 830k), lin_vel_z 1.6x better, ang_vel_xy 1.5x better. tracking_lin_vel slightly lower (raw 0.71 vs 0.89) but acceptable tradeoff for dramatically smoother gait."
+  }
+]

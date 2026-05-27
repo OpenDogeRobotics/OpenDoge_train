@@ -67,7 +67,7 @@ class OpendogeCfg(LeggedRobotCfg):
     class control(LeggedRobotCfg.control):
         control_type = 'P'          # 位置控制 (PD Controller)
         stiffness = {'joint': 10.0}   # PD参数保留
-        damping = {'joint': 0.3}     
+        damping = {'joint': 0.5}     # 增加阻尼，动作更柔顺自然     
         action_scale = 0.25          # 动作缩放：网络输出通常在 [-1, 1]，乘上 0.25 后变为目标关节弧度
         decimation = 2              # 控制频率设置 物理引擎 dt = 0.005 (200Hz) -> 控制频率 = 200 / 2 = 100Hz
 
@@ -115,7 +115,7 @@ class OpendogeCfg(LeggedRobotCfg):
         randomize_base_mass = False
         added_mass_range = [-0.1, 0.3] # 负载范围
         
-        push_robots = True # 随机推力，训练抗干扰
+        push_robots = True # 随机推力 — 精炼期开启，训练抗扰能力
         push_interval_s = 15
         max_push_vel_xy = 0.5
         
@@ -130,13 +130,13 @@ class OpendogeCfg(LeggedRobotCfg):
         randomize_kd = True
         kd_range = [0.8, 1.2]
         
-        # 外力干扰 (Disturbance)
-        disturbance = True
+        # 外力干扰 (Disturbance) — 阶段一关闭，步态形成后开启
+        disturbance = False
         disturbance_range = [-2.0, 2.0] 
         disturbance_interval = 8
         
-        # 延迟随机化 (模拟通信/计算延迟)
-        delay = True
+        # 延迟随机化 (模拟通信/计算延迟) — 阶段一关闭
+        delay = False
 
     # ==========================
     # 7. 奖励函数
@@ -149,26 +149,26 @@ class OpendogeCfg(LeggedRobotCfg):
         class scales(LeggedRobotCfg.rewards.scales):
 
             termination = -0.0              # 终止条件惩罚
-            tracking_lin_vel = 3.0          # 追踪线速度奖励
+            tracking_lin_vel = 1.5          # 追踪线速度奖励 (削半，降低主导)
             tracking_ang_vel = 0.5          # 追踪角速度奖励
             lin_vel_z = -2.0                # 垂直速度惩罚（防止机器人向上跳）
-            ang_vel_xy = -0.05              # 水平角速度惩罚（保持姿态稳定）
-            orientation = -1.3             # 机身方向惩罚（保持机身水平）
-            dof_acc = -2.5e-7               # 关节加速度惩罚（平滑运动）
+            ang_vel_xy = -0.08              # 水平角速度惩罚（减少机身摇晃）
+            orientation = -2.0             # 机身方向惩罚（保持机身水平）
+            dof_acc = -1e-6                 # 关节加速度惩罚（平滑运动）
             joint_power = -2e-5             # 关节功率惩罚（节省能量）
 
-            base_height = -1.0
+            base_height = -1.5              # 高度保持惩罚（精准维持目标高度）
             # base_height_linear = -1.0        # 线性高度惩罚（保持目标高度）
-            default_pos_linear = -0.02        # 默认位置线性惩罚（回归初始姿态）
-            diagonal_sync = -0.1             # 对角线腿部同步惩罚（协调性）
+            default_pos_linear = -0.05        # 默认位置线性惩罚（保持自然站立姿态）
+            diagonal_sync = -0.2             # 对角线腿部同步惩罚（形成trot步态）
             hip_mirror_symmetry = -0.1      # 髋关节镜像对称惩罚
 
             foot_clearance = -0.0          # 脚部高度惩罚（防止拖脚）
-            action_rate = -0.01             # 动作变化率惩罚（平滑控制）
-            smoothness = -0.01              # 平滑度惩罚（流畅运动）
-            feet_air_time = 0.05             # 脚离地时间奖励（鼓励摆动腿抬起）
+            action_rate = -0.02             # 动作变化率惩罚（控制平滑过渡）
+            smoothness = -0.03              # 平滑度惩罚（流畅运动）
+            feet_air_time = 0.50             # 脚离地时间奖励（鼓励摆动腿抬起，10x原始值）
             feet_stumble = -0.0             # 脚绊倒惩罚（暂不使用）
-            stand_still = -1.0               # 静止状态惩罚
+            stand_still = -2.0               # 静止状态惩罚（零指令时安静站姿）
             torques = -0.0                  # 扭矩惩罚（暂不使用）
             dof_vel = -0.0                  # 关节速度惩罚（暂不使用）
             dof_pos_limits = -0.0           # 关节位置限制惩罚（暂不使用）
@@ -229,7 +229,7 @@ class OpendogeCfg(LeggedRobotCfg):
 # ==========================
 class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
-        entropy_coef = 0.01
+        entropy_coef = 0.005  # 精炼期降低探索
         learning_rate = 1e-3 # 降低一点学习率
 
     class runner(LeggedRobotCfgPPO.runner):
