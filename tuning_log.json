@@ -118,6 +118,40 @@
       "lin_vel_x": "[-4.5, 4.5] -> [-4.0, 4.0]"
     },
     "expected_effect": "Peak stability metrics (smoothness 2.55, feet_air_time +0.003, tracking_ang 0.86) sustained at 4.0 m/s range. tracking_lin should recover to 0.85+ without late-training collapse.",
+    "actual_effect": "MILDER BUT STILL DEGRADED. Peak at step 4500-4800 (smoothness=-0.10, episode=2002, tracking_ang=0.87). Declined after 5400: smoothness=-1.09→-2.88, episode=1880→1845. Pattern less severe than 4.5 m/s but not eliminated. Late exploration noise suspected."
+  },
+  {
+    "timestamp": "2026-05-28T02:27:00",
+    "checkpoint_step": 4800,
+    "run_dir": "May28_00-19-50_opendoge_himloco_v1.0",
+    "diagnosis": "Gen 5.2 peaked at step 4500-4800 then degraded (milder than Gen 5.1). Late-stage exploration noise (noise_std=0.235) may push policy from converged optimum.",
+    "changes": {
+      "entropy_coef": "0.005 -> 0.003"
+    },
+    "expected_effect": "Lower exploration bonus keeps policy near peak optimum. Should maintain smoothness < -0.5 through late training.",
+    "actual_effect": "UNDERPERFORMED. entropy=0.003 was more stable (no crash, ep_len~1970) but peaks 2-3x worse than 0.005 (tracking_lin 0.68 vs 0.90, smoothness -0.77 vs -0.10). Lower exploration trapped policy in conservative local optimum. Reverted to 0.005."
+  },
+  {
+    "timestamp": "2026-05-28T03:30:00",
+    "checkpoint_step": 4800,
+    "run_dir": "May28_00-19-50_opendoge_himloco_v1.0",
+    "diagnosis": "entropy=0.003 proven inferior. Best model is May28_00-19-50/model_4800 (ent=0.005 peak). tracking_lin still below Gen 4 — try increasing its weight.",
+    "changes": {
+      "entropy_coef": "0.003 -> 0.005 (revert)",
+      "tracking_lin_vel": "2.0 -> 2.5"
+    },
+    "expected_effect": "Restore peak-reaching ability of ent=0.005 with stronger lin_vel tracking incentive. Target: tracking_lin >0.92 at peak while maintaining smoothness < -0.15.",
+    "actual_effect": "FAILED. tracking_lin=2.5 unbalanced rewards — tracking_ang collapsed (0.73→0.51), smoothness worsened (-0.41→-1.86), noise_std spiked (0.24→0.35). Higher lin_vel weight caused policy to sacrifice everything for lin tracking, which also degraded. 2.0 confirmed optimal."
+  },
+  {
+    "timestamp": "2026-05-28T04:00:00",
+    "checkpoint_step": 4800,
+    "run_dir": "May28_00-19-50_opendoge_himloco_v1.0",
+    "diagnosis": "FINAL CONFIG. All experiments complete. Best model: May28_00-19-50/model_4800. tracking_lin=2.0, ent=0.005, lin_vel_x=4.0 confirmed optimal.",
+    "changes": {
+      "tracking_lin_vel": "2.5 -> 2.0 (revert, final)"
+    },
+    "expected_effect": "Final run from best checkpoint. This is the production model.",
     "actual_effect": null
   },
   {

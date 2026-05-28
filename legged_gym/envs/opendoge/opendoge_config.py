@@ -150,7 +150,7 @@ class OpendogeCfg(LeggedRobotCfg):
         class scales(LeggedRobotCfg.rewards.scales):
 
             termination = -0.0              # 终止条件惩罚
-            tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡)
+            tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡，2.5验证劣于2.0)
             tracking_ang_vel = 1.0          # 追踪角速度奖励（增强转向精度）
             lin_vel_z = -2.5                # 垂直速度惩罚（防止机器人向上跳）
             ang_vel_xy = -0.10              # 水平角速度惩罚（减少机身摇晃）
@@ -230,7 +230,7 @@ class OpendogeCfg(LeggedRobotCfg):
 # ==========================
 class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
-        entropy_coef = 0.005  # 精炼期降低探索
+        entropy_coef = 0.005  # 精炼期探索（回退，0.003抑制了峰值）
         learning_rate = 5e-4 # 降低稳定训练
 
     class runner(LeggedRobotCfgPPO.runner):
