@@ -236,7 +236,7 @@ class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class runner(LeggedRobotCfgPPO.runner):
         run_name = 'opendoge_himloco_v1.0'
         experiment_name = 'flat_opendoge'
-        max_iterations = 6000 # 最大训练迭代次数
+        max_iterations = 9000 # 最大训练迭代次数 (从6000延长，让课程推动侧向指令)
         save_interval = 300 # 每 300 次迭代保存一次模型
 
         # HimLoco核心配置

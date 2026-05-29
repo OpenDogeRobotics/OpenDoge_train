@@ -165,5 +165,20 @@
     },
     "expected_effect": "0.2s threshold achievable. Current ~0.45s air time yields +0.25 positive reward per foot. Virtuous cycle for foot lifting.",
     "actual_effect": "SUCCESS. Final raw smoothness 4.9x better (5.63 vs 27.79), dof_acc 2.1x better (403k vs 830k), lin_vel_z 1.6x better, ang_vel_xy 1.5x better. tracking_lin_vel slightly lower (raw 0.71 vs 0.89) but acceptable tradeoff for dramatically smoother gait."
+  },
+  {
+    "timestamp": "2026-05-28T22:31:00",
+    "checkpoint_step": 0,
+    "run_dir": "May28_22-31-44_opendoge_himloco_v1.0",
+    "diagnosis": "此前17次resume全部从step3000退化。首次训练step0→3000曾达mean_reward+36.63，但每次resume都衰减直至崩溃(smoothness=-6.27)。根因：Adam动量+旧价值函数与当前reward结构不匹配。同时Sim2Sim验证完成了MJCF模型对齐(joint limits, foot spheres, calf inertia)。",
+    "changes": {
+      "training_mode": "resume -> fresh_from_scratch",
+      "MJCF_thigh_range": "[-0.785,0.785] -> [-0.785,1.134] (in deploy XML)",
+      "MJCF_foot_collision": "mesh_convex_hull -> sphere_r0.015m (in deploy XML)",
+      "MJCF_calf_mass": "0.0271kg -> 0.0231kg (in deploy XML)",
+      "MJCF_collision_default": "contype=1 -> contype=0 + explicit (in deploy XML)"
+    },
+    "expected_effect": "从零开始建立一致的optimizer状态和价值函数。Gen 5.2配置(lin_vel_x=[-4,4], kp=12, kd=0.5, action_scale=0.3, lr=5e-4, num_steps=48)已通过Sim2Sim验证。目标：step3000达mean_reward 30+，step6000形成稳定trot步态。",
+    "actual_effect": null
   }
 ]
