@@ -3,7 +3,6 @@
 # OpenDoge MuJoCo IK Gait Tools — unified launcher
 # Usage: ./run.sh <command> [args...]
 # ───────────────────────────────────────────────────────────
-set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
@@ -25,12 +24,18 @@ Usage:  ./run.sh <command> [options]
 Commands:
   pd stand            PD position control — hold standing pose
   pd sine             PD position control — sinusoidal joint motion
-  ik                  Keyboard IK trot gait (X11 or MuJoCo callback)
+  ik                  IK trot gait (keyboard X11 / gamepad)
 
-Recording (add --record to any command above):
-  pd stand  --duration 5  --record stand.npz
-  pd sine   --duration 10 --record sine.npz
-  ik        --no-render --cmd-vx 0.8 --duration 20 --record trot.npz
+Input sources (ik mode, --input flag):
+  --input x11         X11 keyboard polling (default, real press/release)
+  --input callback    MuJoCo viewer key callback (fallback)
+  --input gamepad     Auto-detect gamepad (/dev/input/event*)
+  --input gamepad:<N> Specific device, e.g. gamepad:/dev/input/event15
+
+Recording (add --record to any command):
+  ./run.sh pd stand  --duration 5  --record stand.npz
+  ./run.sh pd sine   --duration 10 --record sine.npz
+  ./run.sh ik --no-render --cmd-vx 0.8 --duration 20 --record trot.npz
 
 Common options:
   --duration N         Simulation duration in seconds
@@ -39,10 +44,10 @@ Common options:
   --print-rate N       Telemetry print rate in Hz (default 2.0)
 
 IK options:
-  --cmd-vx V           Forward velocity command [-1, 1] (headless)
-  --cmd-vy V           Lateral velocity command [-1, 1] (headless)
-  --cmd-yaw V          Yaw rate command [-1, 1] (headless)
-  --c-style            Use C-style foot track planner
+  --cmd-vx V           Forward velocity [-1, 1] (headless)
+  --cmd-vy V           Lateral velocity [-1, 1] (headless)
+  --cmd-yaw V          Yaw rate [-1, 1] (headless)
+  --c-style            C-style foot track planner
 EOF
     exit 0
 }
@@ -55,7 +60,7 @@ case "${1:-}" in
         ;;
     ik)
         shift
-        exec python3 scripts/run_keyboard_ik_control.py "$@"
+        exec python3 scripts/run_ik_control.py "$@"
         ;;
     -h|--help|help)
         usage

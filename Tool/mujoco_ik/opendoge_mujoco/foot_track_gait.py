@@ -61,11 +61,9 @@ class FootTrackGait:
             self.p.start_point = avg_z * 0.30
             self.p.start_point_turn = avg_z * 0.28
 
-        # Timing state
+        # Timing — caller provides gait_time, no internal state machine
         self._cycle_time: float = self.p.step_rate * 2.0
         self._phase_duration: float = self.p.step_rate
-        self._gait_start_time: float = 0.0
-        self._gait_active: bool = False
 
     # ------------------------------------------------------------------
     # Phase helpers
@@ -223,40 +221,36 @@ class FootTrackGait:
     # ------------------------------------------------------------------
 
     def targets(self, t: float, command: BodyCommand) -> dict[str, FootTarget]:
-        """Return foot targets (hip-frame 3D position + velocity) for all legs."""
+        """Return foot targets (hip-frame 3D position + velocity) for all legs.
+
+        Args:
+            t: Gait time in seconds (0 = gait start, caller handles gating).
+            command: Velocity command.
+        """
         command_active = (
             abs(command.vx) > 0.05
             or abs(command.vy) > 0.05
             or abs(command.yaw) > 0.05
         )
+        if not command_active:
+            zero = np.zeros(3, dtype=np.float64)
+            return {leg: FootTarget(position=self.nominal_feet[leg].copy(), velocity=zero.copy())
+                    for leg in self.leg_names}
 
-        # State machine: idle / spot-turn / locomotion
         is_spotturn = abs(command.yaw) > 0.05 and abs(command.vx) < 0.05
         is_locomotion = command_active and not is_spotturn
-
-        # Gate the gait timer
-        if command_active and not self._gait_active:
-            self._gait_start_time = t
-            self._gait_active = True
-        elif not command_active:
-            self._gait_active = False
-
-        gait_time = t - self._gait_start_time if self._gait_active else 0.0
 
         targets: dict[str, FootTarget] = {}
         for leg in self.leg_names:
             nominal = self.nominal_feet[leg]
 
             if is_spotturn:
-                x, z, vx, vz = self._compute_spotturn(gait_time, leg, command)
+                x, z, vx, vz = self._compute_spotturn(t, leg, command)
             elif is_locomotion:
-                x, z, vx, vz = self._compute_locomotion(gait_time, leg, command)
+                x, z, vx, vz = self._compute_locomotion(t, leg, command)
             else:
-                # Idle — hold nominal
-                targets[leg] = FootTarget(
-                    position=nominal.copy(),
-                    velocity=np.zeros(3, dtype=np.float64),
-                )
+                targets[leg] = FootTarget(position=nominal.copy(),
+                                          velocity=np.zeros(3, dtype=np.float64))
                 continue
 
             pos = np.array([x, nominal[1], z], dtype=np.float64)
