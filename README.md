@@ -20,7 +20,6 @@ OpenDoge_train/
 │   │   ├── train.py             # 训练入口
 │   │   └── play.py              # 演示 & ONNX 导出
 │   ├── utils/                   # 工具 (task_registry, logger, terrain 等)
-│   └── sim2sim.py               # MuJoCo Sim2Sim 验证
 ├── rsl_rl/                      # HIMLoco PPO 算法实现
 │   └── rsl_rl/
 │       ├── algorithms/          # HIMPPO, PPO
@@ -32,12 +31,13 @@ OpenDoge_train/
 │   ├── g1_description/          # G1 描述
 │   ├── go1/ go2/                # Go1 / Go2 模型
 │   └── h1/ h1_2/                # H1 模型
-├── deploy/
-│   ├── deploy_mujoco/           # MuJoCo Sim2Sim 部署脚本
-│   │   └── configs/             # opendoge.yaml, go2.yaml, g1.yaml 等
-│   ├── deploy_real/             # 实机部署 (Go2/G1/H1)
-│   │   └── configs/             # g1.yaml, h1.yaml, h1_2.yaml
-│   └── pre_train/               # 预训练模型 (g1, h1, h1_2)
+├── sim2sim/                     # MuJoCo Sim2Sim 迁移测试 (键盘/手柄)
+│   ├── _common.py               # 共享工具 (观测构建, PD控制, 四元数)
+│   ├── onnx_utils.py            # ONNX 路径解析
+│   ├── configs/
+│   │   └── opendoge.yaml        # Sim2Sim 配置 (PD/缩放/默认角度)
+│   ├── sim2sim_keyboard.py      # 键盘控制前端
+│   └── sim2sim_xbox.py          # XBOX 手柄控制前端
 ├── Tool/                        # 辅助工具
 │   ├── check_urdf.py            # URDF 验证
 │   └── simplify_mesh.py         # 网格减面
@@ -175,21 +175,38 @@ python legged_gym/scripts/play.py --task=opendoge --load_run <run_name> --checkp
 tensorboard --logdir=./logs/
 ```
 
-### 3. Sim2Sim (MuJoCo)
+### 3. Sim2Sim (MuJoCo 迁移测试)
+
+训练完成后，在 MuJoCo 中实时验证策略迁移效果：
 
 ```bash
-# OpenDoge 仿真演示
-python deploy/deploy_mujoco/deploy_opendoge.py
+# 键盘控制
+python sim2sim/sim2sim_keyboard.py
+
+# XBOX 手柄控制
+python sim2sim/sim2sim_xbox.py
 
 # 指定 ONNX 模型
-python deploy/deploy_mujoco/deploy_opendoge.py --onnx onnx/flat_opendoge_xxx.onnx
+python sim2sim/sim2sim_keyboard.py --onnx onnx/flat_opendoge_9000_omni.onnx
 ```
 
 #### 键盘操作
 
-| 前进 | 后退 | 左转 | 右转 | 暂停 |
-|------|------|------|------|------|
-| ↑ | ↓ | ← | → | Space |
+| 前进 | 后退 | 左转 | 右转 | 左平移 | 右平移 | 暂停 |
+|------|------|------|------|--------|--------|------|
+| ↑ | ↓ | ← | → | Ctrl+← | Ctrl+→ | Space |
+
+#### XBOX 手柄操作
+
+| 操作 | 映射 |
+|------|------|
+| 左摇杆 ↑↓ | 前进 / 后退 |
+| 左摇杆 ←→ | 左 / 右平移 |
+| 右摇杆 ←→ | 左转 / 右转 |
+| START | 暂停 / 恢复 |
+| BACK | 退出仿真 |
+
+配置参数 (PD、缩放因子、默认角度等) 在 `sim2sim/configs/opendoge.yaml` 中与训练配置对齐。
 
 ### 4. Sim2Real
 
