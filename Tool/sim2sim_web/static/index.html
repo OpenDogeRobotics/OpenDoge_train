@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenDoge Sim2Sim Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;height:100vh;overflow:hidden}
+#app{display:grid;grid-template-columns:260px 1fr 340px;grid-template-rows:auto 1fr auto;height:100vh;gap:1px;background:#333}
+.panel{background:#1e1e32;padding:10px;overflow-y:auto}
+.panel-title{font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:3px}
+/* header */
+#header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#16213e;border-bottom:2px solid #0f3460}
+#header h1{font-size:16px;color:#e94560}
+.header-info{font-size:11px;color:#aaa;display:flex;gap:16px;align-items:center}
+#status{font-size:11px;padding:4px 12px;border-radius:12px;background:#333}
+#status.online{background:#0a3d0a;color:#4caf50}
+#status.offline{background:#3d0a0a;color:#f44336}
+/* controls */
+#controls .control-group{margin-bottom:10px}
+#controls label{display:block;font-size:11px;color:#aaa;margin-bottom:2px}
+#controls select,#controls button{width:100%;padding:5px 8px;border-radius:4px;border:1px solid #444;background:#2a2a4a;color:#ddd;font-size:12px;cursor:pointer}
+#controls select:focus,#controls button:focus{outline:none;border-color:#e94560}
+#controls button{padding:7px;margin-top:5px;font-weight:600;transition:background .15s}
+.btn-start{background:#1b5e20!important}.btn-start:hover{background:#2e7d32!important}
+.btn-stop{background:#b71c1c!important}.btn-stop:hover{background:#d32f2f!important}
+.btn-reset{background:#4a4a2a!important}.btn-reset:hover{background:#6a6a3a!important}
+.model-nav{display:flex;gap:4px;margin-top:4px}
+.model-nav button{flex:1;font-size:11px;padding:4px}
+.slider-group{margin:6px 0}
+.slider-group .val{float:right;font-size:10px;color:#e94560}
+.slider-group input[type=range]{width:100%;accent-color:#e94560}
+.hint{font-size:9px;color:#555;margin-top:2px}
+/* viewer */
+#viewer-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#111;position:relative;cursor:grab;overflow:hidden}
+#viewer-panel:active{cursor:grabbing}
+#viewer-panel.panning{cursor:move}
+#viewer-canvas{width:100%;height:100%;display:block;background:#1a1a2e}
+#viewer-placeholder{color:#555;font-size:13px;text-align:center}
+#viewer-hint{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:10px;color:#555;pointer-events:none}
+/* metrics */
+#metrics .metric-row{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #2a2a3a}
+#metrics .metric-label{color:#999}
+#metrics .metric-value{font-family:monospace;color:#4caf50}
+/* chart containers */
+.chart-box{height:120px;margin:6px 0;position:relative}
+.chart-box canvas{width:100%!important;height:100%!important}
+/* comparison */
+#comparison{grid-column:1/-1;max-height:160px;background:#1e1e32}
+#comp-table{width:100%;font-size:10px;border-collapse:collapse}
+#comp-table th,#comp-table td{padding:2px 6px;text-align:right;border-bottom:1px solid #2a2a3a}
+#comp-table th:first-child,#comp-table td:first-child{text-align:left}
+#comp-table th{color:#888;font-weight:500}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+<!-- HEADER -->
+<div id="header">
+  <h1>🔧 OpenDoge Sim2Sim</h1>
+  <div class="header-info">
+    <span id="model-name">--</span>
+    <span id="status" class="offline">● disconnected</span>
+  </div>
+</div>
+
+<!-- LEFT: CONTROLS -->
+<div id="controls" class="panel">
+  <div class="panel-title">ONNX Model</div>
+  <div class="control-group">
+    <select id="model-select" onchange="switchModel(this.value)"></select>
+    <div class="model-nav">
+      <button onclick="prevModel()" title="[ key">◀ Prev</button>
+      <button onclick="nextModel()" title="] key">Next ▶</button>
+    </div>
+    <div class="hint">Hotkeys: <b>[ ]</b> prev/next &nbsp;|&nbsp; <b>Space</b> pause</div>
+  </div>
+
+  <div class="panel-title">Command Velocity</div>
+  <div class="slider-group">
+    <label>vx (forward) <span class="val" id="val-vx">0.00</span></label>
+    <input type="range" id="slider-vx" min="-1.5" max="1.5" step="0.01" value="0" oninput="onSlider('vx')">
+  </div>
+  <div class="slider-group">
+    <label>vy (lateral) <span class="val" id="val-vy">0.00</span></label>
+    <input type="range" id="slider-vy" min="-1.0" max="1.0" step="0.01" value="0" oninput="onSlider('vy')">
+  </div>
+  <div class="slider-group">
+    <label>ω (yaw) <span class="val" id="val-vyaw">0.00</span></label>
+    <input type="range" id="slider-vyaw" min="-2.0" max="2.0" step="0.01" value="0" oninput="onSlider('vyaw')">
+  </div>
+
+  <div class="panel-title">Simulation</div>
+  <button class="btn-start" onclick="toggleSim()" id="btn-start">▶ Start</button>
+  <button class="btn-reset" onclick="resetSim()">↺ Reset</button>
+</div>
+
+<!-- CENTER: VIEWER -->
+<div id="viewer-panel" class="panel">
+  <canvas id="viewer-canvas"></canvas>
+  <div id="viewer-hint">🖱 drag=rotate &nbsp; right-drag=pan &nbsp; scroll=zoom &nbsp; dblclick=reset view</div>
+</div>
+
+<!-- RIGHT: METRICS -->
+<div id="metrics" class="panel">
+  <div class="panel-title">Joint Positions</div>
+  <div style="height:90px"><canvas id="chart-joints"></canvas></div>
+  <div class="metric-row"><span class="metric-label">base height</span><span class="metric-value" id="m-base-z">--</span></div>
+  <div class="metric-row"><span class="metric-label">lin vel x/y/z</span><span class="metric-value" id="m-lin-vel">--</span></div>
+  <div class="metric-row"><span class="metric-label">ang vel x/y/z</span><span class="metric-value" id="m-ang-vel">--</span></div>
+  <div class="metric-row"><span class="metric-label">feet contact</span><span class="metric-value" id="m-contact">--</span></div>
+  <div class="metric-row"><span class="metric-label">step / model</span><span class="metric-value" id="m-step">--</span></div>
+
+  <div class="panel-title" style="margin-top:6px">History</div>
+  <div class="chart-box"><canvas id="chart-height"></canvas></div>
+  <div class="chart-box"><canvas id="chart-vel"></canvas></div>
+</div>
+
+<!-- BOTTOM: COMPARISON -->
+<div id="comparison" class="panel">
+  <div class="panel-title">Training Comparison
+    <button style="font-size:9px;padding:1px 6px;float:right" onclick="loadComparison()">Refresh</button>
+  </div>
+  <div style="overflow-x:auto"><table id="comp-table"><thead></thead><tbody></tbody></table></div>
+</div>
+
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
