@@ -83,7 +83,7 @@ class OpendogeCfg(LeggedRobotCfg):
         class ranges(LeggedRobotCfg.commands.ranges):
                 lin_vel_x = [-4.0, 4.0] # min max [m/s] — 回收至Gen4水平，4.5对0.24m腿过高
                 lin_vel_y = [-3.0, 3.0]   # 侧向速度范围（平衡全向与稳定）
-                ang_vel_yaw = [-2.5, 2.5]    # 转向速度范围（增强转向灵活性）
+                ang_vel_yaw = [-3.5, 3.5]    # 拓宽转向范围：增强自转灵活性(原2.5)
                 heading = [-3.14, 3.14]
 
     # ==========================
@@ -115,24 +115,24 @@ class OpendogeCfg(LeggedRobotCfg):
         randomize_base_mass = True
         added_mass_range = [-0.15, 0.35] # 负载随机化（模拟不同负载）
         
-        push_robots = True # 随机推力 — 精炼期开启，训练抗扰能力
+        push_robots = True  # R5稳健性：从R3稳定基底逐步开启
         push_interval_s = 10
-        max_push_vel_xy = 0.8
+        max_push_vel_xy = 0.5
         
         # randomize_motor_offset = True
         # motor_offset_range = [-0.05, 0.05] # 模拟电机零点偏移误差 (±5度)
         randomize_motor_strength = True
         motor_strength_range = [0.85, 1.15] # 扩大电机力矩误差范围
         
-        # 关节 PD 参数随机化
-        randomize_kp = True
+        # 关节 PD 参数随机化 — 第二轮关闭：改变action→torque映射，导致策略漂移+退化
+        randomize_kp = False
         kp_range = [0.7, 1.3]
-        randomize_kd = True
+        randomize_kd = False
         kd_range = [0.7, 1.3]
         
         # 外力干扰 (Disturbance) — 精炼期开启，增强抗扰鲁棒性
-        disturbance = True
-        disturbance_range = [-3.0, 3.0]
+        disturbance = False # R6：R5证明push+disturb双开过强，先仅push_robots
+        disturbance_range = [-1.5, 1.5]
         disturbance_interval = 6
         
         # 延迟随机化 (模拟通信/计算延迟) — 阶段一关闭
@@ -151,14 +151,14 @@ class OpendogeCfg(LeggedRobotCfg):
 
             termination = -0.0              # 终止条件惩罚
             tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡，2.5验证劣于2.0)
-            tracking_ang_vel = 1.0          # 追踪角速度奖励（增强转向精度）
+            tracking_ang_vel = 1.5          # 增强转向精度(1.0→1.5)，稳健性精调
             lin_vel_z = -2.5                # 垂直速度惩罚（防止机器人向上跳）
             ang_vel_xy = -0.10              # 水平角速度惩罚（减少机身摇晃）
             orientation = -2.5             # 机身方向惩罚（保持机身水平）
             dof_acc = -2e-6                 # 关节加速度惩罚（平滑运动，2x增强）
             joint_power = -2e-5             # 关节功率惩罚（节省能量）
 
-            base_height = -1.5              # 高度保持惩罚（精准维持目标高度）
+            base_height = -1.5              # R3回退：-3.0反噬(reward landscape扭曲)，恢复Gen5.2原值
             # base_height_linear = -1.0        # 线性高度惩罚（保持目标高度）
             default_pos_linear = -0.05        # 默认位置线性惩罚（保持自然站立姿态）
             diagonal_sync = -0.2             # 对角线腿部同步惩罚（形成trot步态）
@@ -230,13 +230,14 @@ class OpendogeCfg(LeggedRobotCfg):
 # ==========================
 class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
-        entropy_coef = 0.005  # 精炼期探索（回退，0.003抑制了峰值）
-        learning_rate = 5e-4 # 降低稳定训练
+        entropy_coef = 0.003  # R3最优值：已验证比0.005和0.001都好
+        learning_rate = 5e-4 # 回退Gen5.2原值：3e-4太保守，策略困在track_lin=0.10局部最优
+        schedule = 'fixed'   # 禁用KL自适应调度，防止LR衰减至1e-5导致退化(根因修复)
 
     class runner(LeggedRobotCfgPPO.runner):
         run_name = 'opendoge_himloco_v1.0'
         experiment_name = 'flat_opendoge'
-        max_iterations = 9000 # 最大训练迭代次数 (从6000延长，让课程推动侧向指令)
+        max_iterations = 6000 # R5：3600恢复+2400轮稳健性训练
         save_interval = 300 # 每 300 次迭代保存一次模型
 
         # HimLoco核心配置

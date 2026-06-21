@@ -1,5 +1,98 @@
 [
   {
+    "timestamp": "2026-06-21T16:40:00",
+    "checkpoint_step": 3600,
+    "run_dir": "Jun21_16-40-XX_opendoge_himloco_v1.0",
+    "diagnosis": "R5 ROBUSTNESS: R3 (ent=0.003, kp/kd/dist/push off) confirmed optimal stable base. R4 proved ent=0.001 too low. Now gradually add push_robots + disturbance from stable R3 base.",
+    "changes": {
+      "entropy_coef": "0.001 -> 0.003 (revert to R3 optimal)",
+      "push_robots": "False -> True",
+      "disturbance": "False -> True",
+      "max_iterations": "4000 -> 6000",
+      "training_mode": "resume from Jun21_14-37-49/model_3600 (R3 optimal)"
+    },
+    "expected_effect": "Stable gait (R3 base) + mild perturbations should produce robust policy without late-stage collapse. noise_std should stay <0.23, smoothness >-0.5, tracking >0.7.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T16:05:00",
+    "checkpoint_step": 3000,
+    "run_dir": "Jun21_16-04-21_opendoge_himloco_v1.0",
+    "diagnosis": "R4: R3 proved entropy=0.003 is best but noise_std still rose 0.219→0.260 late-stage. Hypothesis: even lower entropy prevents late noise rise entirely.",
+    "changes": {
+      "entropy_coef": "0.003 -> 0.001"
+    },
+    "expected_effect": "noise_std should stay <0.22 throughout. Peak may be slightly lower but should sustain longer without late-stage degradation.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T14:45:00",
+    "checkpoint_step": 3300,
+    "run_dir": "Jun21_14-45-XX_opendoge_himloco_v1.0",
+    "diagnosis": "R2 FAILED: kp/kd off + bh=-3.0 accelerated degradation (peak 20.7→-7.9 by 3816, worse than R1). noise_std rising across all runs (0.22→0.25) indicates entropy_coef=0.005 too high. bh=-3.0 backfired.",
+    "changes": {
+      "entropy_coef": "0.005 -> 0.003",
+      "base_height": "-3.0 -> -1.5 (revert)"
+    },
+    "expected_effect": "Lower exploration reduces policy drift. noise_std should converge instead of diverge. Should maintain peak metrics past step 3500.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T14:24:00",
+    "checkpoint_step": 3300,
+    "run_dir": "Jun21_14-23-57_opendoge_himloco_v1.0",
+    "diagnosis": "ROUND 2: Fixed LR alone insufficient. Current run (schedule=fixed, disturb=False, push=False) still degraded: peak 16.6@3300 → -9.7@4600. Root cause: randomize_kp/kd changes action→torque mapping, causing PPO update conflicts. noise_std rising (0.219→0.268) confirms policy uncertainty. base_height -1.5 too weak → crouching drift (Mode 3).",
+    "changes": {
+      "randomize_kp": "True -> False",
+      "randomize_kd": "True -> False",
+      "base_height": "-1.5 -> -3.0",
+      "training_mode": "resume from Jun21_13-59-50/model_3300 (fixed-LR run peak)"
+    },
+    "expected_effect": "Removing action→torque uncertainty allows precise control learning. 2x base_height penalty stops crouching. Should exceed previous peak (16.6) and maintain without degradation.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T13:59:00",
+    "checkpoint_step": 3300,
+    "run_dir": "Jun21_13-59-50_opendoge_himloco_v1.0",
+    "diagnosis": "ROOT CAUSE FOUND: Adaptive KL schedule (inherited 'adaptive' from base config, not overridden) permanently decays LR to 1e-5 by step 3000-3500 when combined with disturbance+push_robots causing KL spikes. All 6+ previous runs degraded by step 3500. LR at step 5000 was 1e-5 (floor).",
+    "changes": {
+      "schedule": "adaptive -> fixed (ROOT CAUSE FIX)",
+      "disturbance": "True -> False",
+      "push_robots": "True -> False",
+      "max_iterations": "2000 -> 4000",
+      "training_mode": "resume from Jun21_12-50-53/model_3300 (gen52_robust_3300.onnx source)"
+    },
+    "expected_effect": "Fixed LR at 5e-4 prevents irreversible decay. No disturbance/push_robots eliminates KL spike sources. tracking_lin should maintain >0.8, smoothness should improve from -0.8 to <-0.3 over 700 iterations.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T02:58:00",
+    "checkpoint_step": 3910,
+    "run_dir": "Jun21_02-44-06_opendoge_himloco_v1.0",
+    "diagnosis": "DEGRADATION: Reward peaked at step 3100-3200 (mean_reward 13-16), then declined to negative territory by step 3900 (-10 to +3). Episode_length stayed 2002 — policy survived but lost performance. Root cause: disturbance + push_robots ON with warm-started policy caused PPO exploration to destroy converged gait. Pattern matches original Gen5.2 late-stage degradation but occurred earlier (3900 vs 5400).",
+    "changes": {
+      "disturbance": "True -> False",
+      "push_robots": "True -> False",
+      "training_mode": "resume from Jun21_02-44-06/model_3300 (pre-degradation checkpoint)"
+    },
+    "expected_effect": "Removing disturbances allows policy to stabilize around peak metrics. Should recover tracking_lin >0.83, mean_reward >13 within 300-500 iterations.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T02:44:00",
+    "checkpoint_step": 3338,
+    "run_dir": "Jun21_02-44-06_opendoge_himloco_v1.0",
+    "diagnosis": "RESUME from Gen 5.2 best model (May28_00-19-50/model_4800) with identical config. At step 3338, all metrics BETTER than original Gen5.2 at same step: smoothness 6.2x better (-0.153 vs -0.947), ep_len 2002 (max) vs 1778, mean_reward +12%. Weights + optimizer + value function loaded correctly.",
+    "changes": {
+      "training_mode": "resume from May28_00-19-50/model_4800",
+      "config": "Gen 5.2 final (unchanged)",
+      "max_iterations": "6000 -> 9000"
+    },
+    "expected_effect": "Continue Gen 5.2 convergence with warm-started weights. Should reach peak metrics (tracking_lin >0.90, smoothness <2.5) faster than original run.",
+    "actual_effect": null
+  },
+  {
     "timestamp": "2026-05-27T01:50:00",
     "checkpoint_step": 0,
     "run_dir": "May27_01-45-57_opendoge_himloco_v1.0",
