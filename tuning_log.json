@@ -1,5 +1,96 @@
 [
   {
+    "timestamp": "2026-06-21T19:19:00",
+    "checkpoint_step": 0,
+    "run_dir": "Jun21_19-19-18_opendoge_himloco_v1.0",
+    "diagnosis": "ABLATION COMPLETE. Tested ent=0.002/0.003/0.005/0.01, push=True/False, lr=5e-4/1e-3 from scratch. ONLY ent=0.01 (base class default) achieved from-scratch gait emergence (May27_02-34, tracking_lin=0.71). ALL ent≤0.005 from scratch fail identically: tracking_lin stuck at 0.10. Gen5.2's 'success' was a RESUME from checkpoints that were originally trained with ent=0.01.",
+    "changes": {
+      "entropy_coef": "0.005 -> 0.01 (base class default, only value proven for from-scratch gait emergence)",
+      "push_robots": "True -> False (May27_02-34 success was without push)",
+      "max_iterations": "5000 -> 3000 (original success window)"
+    },
+    "expected_effect": "Should replicate May27_02-34: tracking_lin ramps to 0.5-0.7 raw by step 2000-3000. smoothness may be worse than V7.0-7.5 but tracking is the primary metric.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T19:05:00",
+    "checkpoint_step": 0,
+    "run_dir": "Jun21_19-05-48_opendoge_himloco_v1.0",
+    "diagnosis": "V7.0-7.4 all failed: tracking_lin stuck at 0.10 regardless of entropy (0.002/0.003/0.005). Root cause re-identified: domain randomization (push_robots) IS the exploration mechanism. Gen5.2 succeeded with push=True from scratch — the perturbations force policy to actively move/balance, preventing the 'stand still + turn' conservative optimum. V7 wrongly removed all perturbations for 'stability'.",
+    "changes": {
+      "learning_rate": "5e-4 -> 1e-3 (Gen5.2 initial value, higher lr for initial gait emergence)",
+      "push_robots": "False -> True (THE exploration mechanism, not an optional add-on)",
+      "push_interval_s": "10 -> 15 (gentler)",
+      "max_push_vel_xy": "0.5 -> 0.3 (gentler start)"
+    },
+    "expected_effect": "Push forces policy to actively move for balance. Combined with high lr and ent=0.005, should break through the 'stand still' local optimum. tracking_lin should ramp by step 1000-1500.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T18:54:00",
+    "checkpoint_step": 0,
+    "run_dir": "Jun21_18-54-20_opendoge_himloco_v1.0",
+    "diagnosis": "CRITICAL FINDING: V7.0(ent=0.002), V7.2(ent=0.002), V7.3(ent=0.003) ALL failed from scratch — tracking_lin stuck at 0.10. R3's good tracking_lin data was from RESUME (step 3300 checkpoint), not from scratch. Only Gen5.2(ent=0.005) achieved tracking_lin>0.8 from scratch. Pattern: low entropy works for fine-tuning existing gait, but gait EMERGENCE requires high entropy.",
+    "changes": {
+      "entropy_coef": "0.003 -> 0.005 (Gen5.2 only from-scratch value proven to work)",
+      "max_iterations": "3500 -> 5000 (Gen5.2 peak@4500-4800, need room to reach peak)"
+    },
+    "expected_effect": "Should replicate Gen5.2: tracking_lin ramps 0→0.8+ by step 2000-3000, peak smoothness around step 4500. Export best checkpoint (composite score) before degradation zone.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T18:44:00",
+    "checkpoint_step": 0,
+    "run_dir": "Jun21_18-44-26_opendoge_himloco_v1.0",
+    "diagnosis": "V7.0(ent=0.002,ang=1.5)→tracking_lin stuck@0.12. V7.1(ent=0.0025)→immediate collapse. V7.2(ent=0.002,ang=1.0)→tracking_lin stuck@0.11. All three proven: ent≤0.002 traps policy in conservative optimum. ONLY R3(ent=0.003) historically achieved tracking_lin>0.8. V7 premise wrong: late degradation was from training-too-long, not entropy itself.",
+    "changes": {
+      "entropy_coef": "0.002 -> 0.003 (R3 optimal, only value proven to work)",
+      "tracking_ang_vel": "1.0 -> 1.5 (restore R3 value)",
+      "max_iterations": "4000 -> 3500 (stop before historical degradation zone)"
+    },
+    "expected_effect": "R3 achieved tracking_lin raw 0.85, smoothness -0.15, noise ~0.22 at step 3000-3500. V7.3 should replicate. Stop at 3500 to avoid late degradation.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T18:31:00",
+    "checkpoint_step": 0,
+    "run_dir": "Jun21_18-31-08_opendoge_himloco_v1.0",
+    "diagnosis": "V7.1 entropy=0.0025 collapsed in 91 steps (rew +24→-51). Root cause deeper: tracking_ang_vel=1.5 gave policy 'turn-only cheat' worth 1.43 reward — combined with stability terms, no incentive to learn forward gait. ent=0.002 was stable BECAUSE it suppressed exploration away from the cheat, not because it was optimal.",
+    "changes": {
+      "entropy_coef": "0.0025 -> 0.002 (revert, 0.0025 caused crash)",
+      "tracking_ang_vel": "1.5 -> 1.0 (remove turn-only cheat, back to Gen5.2 value)"
+    },
+    "expected_effect": "With ang_vel weight halved, policy cannot survive on turning alone. Must learn forward gait to achieve reward. ent=0.002 keeps exploration stable. Target: tracking_lin >0.5 by step 2000, >0.8 by step 3000.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T18:21:00",
+    "checkpoint_step": 1600,
+    "run_dir": "Jun21_18-21-29_opendoge_himloco_v1.0",
+    "diagnosis": "V7.1: entropy=0.002 caused policy to settle in conservative local optimum. tracking_lin stuck at 0.10 (raw=0.05) for 800 steps. Policy learned 'turn perfectly + stay smooth' cheat yielding rew=24 without forward movement.",
+    "changes": {
+      "entropy_coef": "0.002 -> 0.0025"
+    },
+    "expected_effect": "More exploration forces policy beyond 'turn-only' strategy. tracking_lin should resume upward within 300-500 steps. Target: tracking_lin >0.5 by step 2200.",
+    "actual_effect": null
+  },
+  {
+    "timestamp": "2026-06-21T18:00:00",
+    "checkpoint_step": 0,
+    "run_dir": "V7_fresh_start",
+    "diagnosis": "V7 WORKFLOW: Analyzed all 30+ experiments across R1-R6 + Gen1-5.2. Root cause: policy degrades universally after step 3700+ even WITHOUT perturbations. R6 push-only crashed to -32.78. R5 push+disturb crashed to -23. R3 pure also degraded (20→5). Push/disturb are amplifiers, not root cause. PPO exploration entropy pushes policy off optimization cliff after peak.",
+    "changes": {
+      "entropy_coef": "0.003 -> 0.002 (Goldilocks between 0.001 too low and 0.003 causing late-stage drift)",
+      "push_robots": "True -> False (R6 proved even single perturbation crashes)",
+      "disturbance": "False -> False (maintained, R5 proved double perturbation crashes)",
+      "max_iterations": "6000 -> 4000 (stop at peak, don't train into degradation zone)",
+      "save_interval": "300 -> 200 (denser checkpoints for precise peak selection)",
+      "training_mode": "fresh from scratch (never resume from degrading checkpoint)"
+    },
+    "expected_effect": "Peak around step 2500-3500 without late degradation. noise_std should stay <0.23. Export best checkpoint (smoothness×0.4 + tracking×0.3 + reward×0.2 - noise×0.1 composite). Robostness trained as independent run with lower LR (3e-4) and curriculum push_vel (0.1→0.2→0.3).",
+    "actual_effect": null
+  },
+  {
     "timestamp": "2026-06-21T16:40:00",
     "checkpoint_step": 3600,
     "run_dir": "Jun21_16-40-XX_opendoge_himloco_v1.0",

@@ -115,20 +115,20 @@ class OpendogeCfg(LeggedRobotCfg):
         randomize_base_mass = True
         added_mass_range = [-0.15, 0.35] # 负载随机化（模拟不同负载）
         
-        push_robots = True  # R5稳健性：从R3稳定基底逐步开启
-        push_interval_s = 10
-        max_push_vel_xy = 0.5
+        push_robots = False  # V7.6: May27_02-34从零成功时push=False。步态涌现后再开启
+        push_interval_s = 15
+        max_push_vel_xy = 0.3
         
         # randomize_motor_offset = True
         # motor_offset_range = [-0.05, 0.05] # 模拟电机零点偏移误差 (±5度)
         randomize_motor_strength = True
         motor_strength_range = [0.85, 1.15] # 扩大电机力矩误差范围
         
-        # 关节 PD 参数随机化 — 第二轮关闭：改变action→torque映射，导致策略漂移+退化
-        randomize_kp = False
-        kp_range = [0.7, 1.3]
-        randomize_kd = False
-        kd_range = [0.7, 1.3]
+        # 关节 PD 参数随机化 — V7.8恢复：action→torque不确定性迫使策略做大动作，是步态涌现的关键探索机制
+        randomize_kp = True
+        kp_range = [0.8, 1.2]
+        randomize_kd = True
+        kd_range = [0.8, 1.2]
         
         # 外力干扰 (Disturbance) — 精炼期开启，增强抗扰鲁棒性
         disturbance = False # R6：R5证明push+disturb双开过强，先仅push_robots
@@ -150,8 +150,8 @@ class OpendogeCfg(LeggedRobotCfg):
         class scales(LeggedRobotCfg.rewards.scales):
 
             termination = -0.0              # 终止条件惩罚
-            tracking_lin_vel = 2.0          # 追踪线速度奖励 (全向移动平衡，2.5验证劣于2.0)
-            tracking_ang_vel = 1.5          # 增强转向精度(1.0→1.5)，稳健性精调
+            tracking_lin_vel = 1.5          # V7.10: May27_02-34原始值(唯一从零成功的配置)
+            tracking_ang_vel = 0.5          # V7.10: May27_02-34原始值
             lin_vel_z = -2.5                # 垂直速度惩罚（防止机器人向上跳）
             ang_vel_xy = -0.10              # 水平角速度惩罚（减少机身摇晃）
             orientation = -2.5             # 机身方向惩罚（保持机身水平）
@@ -230,15 +230,15 @@ class OpendogeCfg(LeggedRobotCfg):
 # ==========================
 class OpendogeCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
-        entropy_coef = 0.003  # R3最优值：已验证比0.005和0.001都好
-        learning_rate = 5e-4 # 回退Gen5.2原值：3e-4太保守，策略困在track_lin=0.10局部最优
-        schedule = 'fixed'   # 禁用KL自适应调度，防止LR衰减至1e-5导致退化(根因修复)
+        entropy_coef = 0.01   # V7.6: 基类默认值。May27_02-34用此值从零训练成功(tracking_lin=0.71)。所有ent≤0.005的从零尝试均失败
+        learning_rate = 1e-3 # V7.5: Gen5.2初始值。5e-4太保守无法从零涌现步态
+        schedule = 'adaptive' # V7.7: 恢复基类默认。fixed+高ent导致永不收敛。无push/disturb时KL尖峰可控
 
     class runner(LeggedRobotCfgPPO.runner):
         run_name = 'opendoge_himloco_v1.0'
         experiment_name = 'flat_opendoge'
-        max_iterations = 6000 # R5：3600恢复+2400轮稳健性训练
-        save_interval = 300 # 每 300 次迭代保存一次模型
+        max_iterations = 9000 # V7 Final: 消融证明从零涌现步态需要>5000轮。长训练+密集保存选最优checkpoint
+        save_interval = 200 # V7: 更密集保存以便精确选择最优checkpoint
 
         # HimLoco核心配置
         policy_class_name = 'HIMActorCritic' 
