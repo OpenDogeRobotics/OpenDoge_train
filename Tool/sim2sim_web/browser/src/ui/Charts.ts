@@ -42,7 +42,7 @@ export class Charts {
         labels: ['FL_h','FL_t','FL_c','FR_h','FR_t','FR_c','RL_h','RL_t','RL_c','RR_h','RR_t','RR_c'],
         datasets: [{
           data: new Array(12).fill(0),
-          backgroundColor: '#4caf50',
+          backgroundColor: '#8cac94',
         }],
       },
       options: {
@@ -50,8 +50,8 @@ export class Charts {
         maintainAspectRatio: false,
         animation: false,
         scales: {
-          y: { min: -2, max: 2, ticks: { color: '#888', font: { size: 8 } } },
-          x: { ticks: { color: '#888', font: { size: 7 } } },
+          y: { min: -2, max: 2, ticks: { color: '#6c6c74', font: { size: 8 } } },
+          x: { ticks: { color: '#6c6c74', font: { size: 7 } } },
         },
         plugins: { legend: { display: false } },
       },
@@ -65,7 +65,7 @@ export class Charts {
         labels: [],
         datasets: [{
           data: [],
-          borderColor: '#4caf50',
+          borderColor: '#8cac94',
           borderWidth: 1.5,
           pointRadius: 0,
           tension: 0.1,
@@ -76,8 +76,8 @@ export class Charts {
         maintainAspectRatio: false,
         animation: false,
         scales: {
-          y: { min: 0.05, max: 0.3, ticks: { color: '#888', font: { size: 9 } } },
-          x: { ticks: { color: '#888', font: { size: 8 }, maxTicksLimit: 6 } },
+          y: { min: 0.05, max: 0.3, ticks: { color: '#6c6c74', font: { size: 9 } } },
+          x: { ticks: { color: '#6c6c74', font: { size: 8 }, maxTicksLimit: 6 } },
         },
         plugins: { legend: { display: false } },
       },
@@ -90,9 +90,9 @@ export class Charts {
       data: {
         labels: [],
         datasets: [
-          { data: [], borderColor: '#e94560', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
-          { data: [], borderColor: '#2196f3', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
-          { data: [], borderColor: '#ff9800', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+          { data: [], borderColor: '#c0843c', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+          { data: [], borderColor: '#7c9cb0', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+          { data: [], borderColor: '#b09870', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
         ],
       },
       options: {
@@ -100,8 +100,8 @@ export class Charts {
         maintainAspectRatio: false,
         animation: false,
         scales: {
-          y: { ticks: { color: '#888', font: { size: 9 } } },
-          x: { ticks: { color: '#888', font: { size: 8 }, maxTicksLimit: 6 } },
+          y: { ticks: { color: '#6c6c74', font: { size: 9 } } },
+          x: { ticks: { color: '#6c6c74', font: { size: 8 }, maxTicksLimit: 6 } },
         },
         plugins: { legend: { display: false } },
       },

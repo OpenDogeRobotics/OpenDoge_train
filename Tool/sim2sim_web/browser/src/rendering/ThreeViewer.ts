@@ -40,7 +40,7 @@ export class ThreeViewer {
 
     // ── Scene ─────────────────────────────────────────────────────
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
+    this.scene.background = new THREE.Color(0x151518);
 
     // ── Camera ────────────────────────────────────────────────────
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 50);
@@ -93,11 +93,11 @@ export class ThreeViewer {
   // ═══════════════════════════════════════════════════════════════════
 
   private setupLighting(): void {
-    const ambient = new THREE.AmbientLight(0x606080, 0.6);
+    const ambient = new THREE.AmbientLight(0x5a5a68, 0.55);
     this.scene.add(ambient);
 
-    const keyLight = new THREE.DirectionalLight(0xfff5e6, 2.5);
-    keyLight.position.set(2, 3, 1);
+    const keyLight = new THREE.DirectionalLight(0xfff8ee, 2.2);
+    keyLight.position.set(2.5, 3.5, 1.5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
     keyLight.shadow.mapSize.height = 1024;
@@ -110,11 +110,11 @@ export class ThreeViewer {
     keyLight.shadow.bias = -0.0001;
     this.scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8899cc, 0.5);
-    fillLight.position.set(-1, 0.5, -1);
+    const fillLight = new THREE.DirectionalLight(0x8890a8, 0.4);
+    fillLight.position.set(-1.5, 0.8, -1.5);
     this.scene.add(fillLight);
 
-    const hemi = new THREE.HemisphereLight(0x8888cc, 0x443322, 0.3);
+    const hemi = new THREE.HemisphereLight(0x808098, 0x403830, 0.35);
     this.scene.add(hemi);
   }
 
@@ -123,7 +123,7 @@ export class ThreeViewer {
   // ═══════════════════════════════════════════════════════════════════
 
   private setupGround(): void {
-    const grid = new THREE.GridHelper(4, 20, 0x444466, 0x2a2a3a);
+    const grid = new THREE.GridHelper(4, 20, 0x3a3a44, 0x262630);
     grid.position.y = 0.001;
     this.scene.add(grid);
 
