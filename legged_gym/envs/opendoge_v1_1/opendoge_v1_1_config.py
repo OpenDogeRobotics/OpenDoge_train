@@ -12,26 +12,30 @@ class OpenDogeV11Cfg(OpendogeCfg):
         pos = [0.0, 0.0, 0.158]
         default_joint_angles = {
             "FL_hip_joint": 0.0,
-            "FL_thigh_joint": 0.6,
-            "FL_calf_joint": -1.5,
+            "FL_thigh_joint": 0.8,
+            "FL_calf_joint": -1.6,
             "FR_hip_joint": 0.0,
-            "FR_thigh_joint": -0.6,
-            "FR_calf_joint": 1.5,
+            "FR_thigh_joint": -0.8,
+            "FR_calf_joint": 1.6,
             "RL_hip_joint": 0.0,
-            "RL_thigh_joint": 0.6,
-            "RL_calf_joint": -1.5,
+            "RL_thigh_joint": 0.8,
+            "RL_calf_joint": -1.6,
             "RR_hip_joint": 0.0,
-            "RR_thigh_joint": -0.6,
-            "RR_calf_joint": 1.5,
+            "RR_thigh_joint": -0.8,
+            "RR_calf_joint": 1.6,
         }
 
     class asset(OpendogeCfg.asset):
-        file = "{LEGGED_GYM_ROOT_DIR}/resources/robots/OpenDogV1.1/urdf/OpenDog.SLDASM.urdf"
+        file = "{LEGGED_GYM_ROOT_DIR}/resources/robots/OpenDogV1.1/urdf/OpenDogV1_1.urdf"
         name = "opendoge_v1_1"
 
         foot_name = "foot"
         penalize_contacts_on = ["hip", "thigh", "calf", "base"]
         terminate_after_contacts_on = ["base"]
+
+    class commands(OpendogeCfg.commands):
+        class ranges(OpendogeCfg.commands.ranges):
+            lin_vel_x = [-1.0, 1.0]
 
     class rewards(OpendogeCfg.rewards):
         base_height_target = 0.158

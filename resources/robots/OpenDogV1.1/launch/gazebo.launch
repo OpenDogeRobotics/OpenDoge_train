@@ -10,7 +10,7 @@
     name="spawn_model"
     pkg="gazebo_ros"
     type="spawn_model"
-    args="-file $(find OpenDog.SLDASM)/urdf/OpenDog.SLDASM.urdf -urdf -model OpenDog.SLDASM"
+    args="-file $(find OpenDog.SLDASM)/urdf/OpenDogV1_1.urdf -urdf -model OpenDog.SLDASM"
     output="screen" />
   <node
     name="fake_joint_calibration"

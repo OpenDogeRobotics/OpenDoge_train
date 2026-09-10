@@ -3,7 +3,7 @@
     name="model" />
   <param
     name="robot_description"
-    textfile="$(find OpenDog.SLDASM)/urdf/OpenDog.SLDASM.urdf" />
+    textfile="$(find OpenDog.SLDASM)/urdf/OpenDogV1_1.urdf" />
   <node
     name="joint_state_publisher_gui"
     pkg="joint_state_publisher_gui"
