@@ -45,7 +45,7 @@
     </collision>
   </link>
   <link
-    name="Fl_hip">
+    name="FL_hip">
     <inertial>
       <origin
         xyz="0.0381 -0.0008 0"
@@ -85,7 +85,7 @@
     </collision>
   </link>
   <joint
-    name="Fl_hip_joint"
+    name="FL_hip_joint"
     type="revolute">
     <origin
       xyz="0.095 0.04 0.002"
@@ -93,7 +93,7 @@
     <parent
       link="base_link" />
     <child
-      link="Fl_hip" />
+      link="FL_hip" />
     <axis
       xyz="1 0 0" />
     <limit
@@ -149,7 +149,7 @@
       xyz="0.04105 0.022000 0"
       rpy="0 0 0" />
     <parent
-      link="Fl_hip" />
+      link="FL_hip" />
     <child
       link="FL_thigh" />
     <axis

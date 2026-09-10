@@ -125,6 +125,12 @@ export PYTHONPATH=$PWD
 python legged_gym/scripts/train.py --task=opendoge --headless
 ```
 
+OpenDog V1.1 使用独立任务配置：
+
+```bash
+python legged_gym/scripts/train.py --task=opendoge_v1_1 --headless
+```
+
 从 checkpoint 继续训练：
 
 ```bash
@@ -136,6 +142,7 @@ python legged_gym/scripts/train.py --task=opendoge --resume --load_run <run_name
 | task | 机器人 |
 |------|--------|
 | `opendoge` | OpenDoge |
+| `opendoge_v1_1` | OpenDog V1.1 |
 | `a1` | Unitree A1 |
 | `go1` | Unitree Go1 |
 
