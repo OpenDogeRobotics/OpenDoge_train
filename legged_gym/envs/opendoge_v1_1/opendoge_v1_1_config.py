@@ -7,8 +7,9 @@ class OpenDogeV11Cfg(OpendogeCfg):
     """OpenDoge training setup adapted to the OpenDog V1.1 kinematics."""
 
     class init_state(OpendogeCfg.init_state):
-        # V1.1 has shorter leg links and no separate foot link.
-        pos = [0.0, 0.0, 0.15]
+        # The fixed foot collision sphere has a 15 mm radius; this height puts
+        # its bottom on the z=0 plane in the default standing pose.
+        pos = [0.0, 0.0, 0.158]
         default_joint_angles = {
             "FL_hip_joint": 0.0,
             "FL_thigh_joint": 0.6,
@@ -28,13 +29,12 @@ class OpenDogeV11Cfg(OpendogeCfg):
         file = "{LEGGED_GYM_ROOT_DIR}/resources/robots/OpenDogV1.1/urdf/OpenDog.SLDASM.urdf"
         name = "opendoge_v1_1"
 
-        # V1.1 ends at the calf; use calf bodies as the four foot contacts.
-        foot_name = "calf"
-        penalize_contacts_on = ["hip", "thigh", "base"]
+        foot_name = "foot"
+        penalize_contacts_on = ["hip", "thigh", "calf", "base"]
         terminate_after_contacts_on = ["base"]
 
     class rewards(OpendogeCfg.rewards):
-        base_height_target = 0.15
+        base_height_target = 0.158
 
 
 class OpenDogeV11CfgPPO(OpendogeCfgPPO):
