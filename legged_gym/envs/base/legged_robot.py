@@ -504,14 +504,28 @@ class LeggedRobot(BaseTask):
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
 
     def _reset_dofs(self, env_ids):
-        """ Resets DOF position and velocities of selected environmments
-        Positions are randomly selected within 0.5:1.5 x default positions.
-        Velocities are set to zero.
+        """Reset DOF position and velocity for selected environments.
+
+        Tasks can opt into additive reset noise with
+        ``init_state.dof_reset_noise_range``; otherwise the legacy
+        multiplicative reset is retained.
 
         Args:
             env_ids (List[int]): Environemnt ids
         """
-        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
+        reset_noise_range = getattr(self.cfg.init_state, "dof_reset_noise_range", None)
+        if reset_noise_range is None:
+            self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(
+                0.5, 1.5, (len(env_ids), self.num_dof), device=self.device
+            )
+        else:
+            reset_noise = torch_rand_float(
+                -reset_noise_range,
+                reset_noise_range,
+                (len(env_ids), self.num_dof),
+                device=self.device,
+            )
+            self.dof_pos[env_ids] = self.default_dof_pos + reset_noise
         self.dof_vel[env_ids] = 0.
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -1412,5 +1426,3 @@ class LeggedRobot(BaseTask):
         reward = torch.square(total_error * 10.0)  # 缩放因子可调整敏感度
         
         return reward
-
-

@@ -35,12 +35,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0.004 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/base_link.STL" />
+      <box size="0.198 0.145 0.080" />
       </geometry>
     </collision>
   </link>
@@ -75,12 +72,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.041 -0.004 0" rpy="0 1.5708 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FL_hip.STL" />
+        <cylinder radius="0.017" length="0.055" />
       </geometry>
     </collision>
   </link>
@@ -133,12 +127,15 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.004 0.040 -0.005" rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FL_thigh.STL" />
+        <cylinder radius="0.017" length="0.035" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.010 0.064 -0.082" rpy="0 0.25 0" />
+      <geometry>
+        <box size="0.018 0.014 0.055" />
       </geometry>
     </collision>
   </link>
@@ -191,12 +188,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.0025 0.001 -0.055" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FL_calf.STL" />
+        <box size="0.012 0.008 0.075" />
       </geometry>
     </collision>
   </link>
@@ -265,12 +259,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.048 0.004 0" rpy="0 1.5708 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FR_hip.STL" />
+        <cylinder radius="0.017" length="0.050" />
       </geometry>
     </collision>
   </link>
@@ -323,12 +314,15 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.004 -0.040 -0.005" rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FR_thigh.STL" />
+        <cylinder radius="0.017" length="0.035" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.010 -0.064 -0.082" rpy="0 0.25 0" />
+      <geometry>
+        <box size="0.018 0.014 0.055" />
       </geometry>
     </collision>
   </link>
@@ -381,12 +375,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.0025 -0.001 -0.055" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/FR_calf.STL" />
+        <box size="0.012 0.008 0.075" />
       </geometry>
     </collision>
   </link>
@@ -455,12 +446,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="-0.048 -0.004 0" rpy="0 1.5708 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RL_hip.STL" />
+        <cylinder radius="0.017" length="0.050" />
       </geometry>
     </collision>
   </link>
@@ -513,12 +501,15 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="-0.006 0.040 -0.005" rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RL_thigh.STL" />
+        <cylinder radius="0.017" length="0.035" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.010 0.064 -0.082" rpy="0 0.25 0" />
+      <geometry>
+        <box size="0.018 0.014 0.055" />
       </geometry>
     </collision>
   </link>
@@ -571,12 +562,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.0025 0.001 -0.055" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RL_calf.STL" />
+        <box size="0.012 0.008 0.075" />
       </geometry>
     </collision>
   </link>
@@ -645,12 +633,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="-0.048 0.004 0" rpy="0 1.5708 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RR_hip.STL" />
+        <cylinder radius="0.017" length="0.050" />
       </geometry>
     </collision>
   </link>
@@ -703,12 +688,15 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="-0.006 -0.040 -0.005" rpy="1.5708 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RR_thigh.STL" />
+        <cylinder radius="0.017" length="0.035" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.010 -0.064 -0.082" rpy="0 0.25 0" />
+      <geometry>
+        <box size="0.018 0.014 0.055" />
       </geometry>
     </collision>
   </link>
@@ -761,12 +749,9 @@
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.0025 -0.001 -0.055" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="../meshes/RR_calf.STL" />
+        <box size="0.012 0.008 0.075" />
       </geometry>
     </collision>
   </link>

@@ -10,6 +10,7 @@ class OpenDogeV11Cfg(OpendogeCfg):
         # The fixed foot collision sphere has a 15 mm radius; this height puts
         # its bottom on the z=0 plane in the default standing pose.
         pos = [0.0, 0.0, 0.158]
+        dof_reset_noise_range = 0.1
         default_joint_angles = {
             "FL_hip_joint": 0.0,
             "FL_thigh_joint": 0.8,
@@ -36,6 +37,8 @@ class OpenDogeV11Cfg(OpendogeCfg):
     class commands(OpendogeCfg.commands):
         class ranges(OpendogeCfg.commands.ranges):
             lin_vel_x = [-1.0, 1.0]
+            lin_vel_y = [-1.0, 1.0]
+            ang_vel_yaw = [-1.0, 1.0]
 
     class rewards(OpendogeCfg.rewards):
         base_height_target = 0.158
