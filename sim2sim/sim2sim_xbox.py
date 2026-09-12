@@ -43,10 +43,7 @@ def parse_args():
 
 
 ARGS = parse_args()
-ONNX_PATH = resolve_onnx_path(cli_onnx=ARGS.onnx)
-
-print(f"YAML : {YAML_PATH}")
-print(f"ONNX : {ONNX_PATH}")
+ONNX_PATH = None
 
 # ==================== 2. Globals ====================
 cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # [vx, vy, omega]
@@ -130,6 +127,18 @@ def key_callback(keycode):
         print(f"Paused: {paused}")
 
 
+def resolve_policy_path(config):
+    """Resolve CLI/environment overrides before the YAML policy path."""
+    if ARGS.onnx or os.environ.get("OPENDOGE_ONNX_PATH"):
+        return resolve_onnx_path(cli_onnx=ARGS.onnx)
+
+    policy_path = config.get("policy_path")
+    if policy_path:
+        policy_path = policy_path.replace("{LEGGED_GYM_ROOT_DIR}", LEGGED_GYM_ROOT_DIR)
+        return resolve_onnx_path(cli_onnx=policy_path)
+    return resolve_onnx_path()
+
+
 # ==================== 5. Main ====================
 def run_simulation():
     global cmd, default_dof_pos, running
@@ -140,6 +149,11 @@ def run_simulation():
 
     with open(YAML_PATH, "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+
+    global ONNX_PATH
+    ONNX_PATH = resolve_policy_path(config)
+    print(f"YAML : {YAML_PATH}")
+    print(f"ONNX : {ONNX_PATH}")
 
     sim_dt = float(config.get("simulation_dt", 0.005))
     control_decimation = int(config.get("control_decimation", 2))
@@ -182,7 +196,7 @@ def run_simulation():
         _ = data.sensor("angular-velocity").data
     except KeyError:
         use_gyro_sensor = False
-        print("WARNING: sensor 'angular-velocity' not found; falling back to data.qvel[3:6].")
+        print("WARNING: sensor 'angular-velocity' not found; using body-frame angular velocity derived from qvel.")
 
     print(f"Loading ONNX: {ONNX_PATH}")
     ort_session = ort.InferenceSession(ONNX_PATH)

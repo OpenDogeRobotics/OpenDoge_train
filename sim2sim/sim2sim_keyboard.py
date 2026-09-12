@@ -17,7 +17,11 @@ import mujoco.viewer
 import onnxruntime as ort
 import yaml
 from collections import deque
-from pynput import keyboard
+try:
+    from pynput import keyboard
+except ImportError:
+    keyboard = None
+    print("WARNING: pynput is not installed; keyboard commands are disabled.")
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from sim2sim.onnx_utils import resolve_onnx_path
@@ -43,10 +47,7 @@ def parse_args():
 
 
 ARGS = parse_args()
-ONNX_PATH = resolve_onnx_path(cli_onnx=ARGS.onnx)
-
-print(f"YAML : {os.path.abspath(ARGS.config)}")
-print(f"ONNX : {ONNX_PATH}")
+ONNX_PATH = None
 
 # ==================== 2. Globals ====================
 cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # [vx, vy, omega]
@@ -60,6 +61,9 @@ _pressed = set()
 
 def _update_cmd():
     global cmd
+    if keyboard is None:
+        cmd[:] = 0.0
+        return
     ctrl = keyboard.Key.ctrl_l in _pressed or keyboard.Key.ctrl_r in _pressed
     vx = vy = omega = 0.0
 
@@ -85,32 +89,77 @@ def _update_cmd():
 
 
 def on_press(key):
+    if keyboard is None:
+        return
     _pressed.add(key)
     _update_cmd()
 
 
 def on_release(key):
+    if keyboard is None:
+        return
     _pressed.discard(key)
     _update_cmd()
 
 
 def load_mujoco_model(xml_path, num_actions):
-    """Load MJCF or compile the V1.1 URDF with a floor and actuators."""
+    """Load MJCF or compile the V1.1 URDF with matching sensors and actuators."""
     if not xml_path.lower().endswith(".urdf"):
         return mujoco.MjModel.from_xml_path(xml_path)
 
+    # MuJoCo 3.2 mutates the instance and returns None; newer releases return
+    # a populated spec from the instance method instead.
     spec = mujoco.MjSpec()
-    spec.from_file(xml_path)
+    parsed_spec = spec.from_file(xml_path)
+    if parsed_spec is not None:
+        spec = parsed_spec
     # MuJoCo's URDF importer discards <visual> elements by default.  Keep the
     # primitive <collision> elements from the URDF, then add the STL visuals
     # explicitly below so they render without entering contact generation.
-    spec.discardvisual = 0
+    # `discardvisual` exists only in some MuJoCo Python releases.  The
+    # explicit STL geoms below are used for rendering, so compilation does
+    # not depend on this optional importer flag.
+    if hasattr(spec, "discardvisual"):
+        spec.discardvisual = 0
     spec.meshdir = os.path.abspath(os.path.join(os.path.dirname(xml_path), "../meshes"))
     # URDF has an implicit floating base for Isaac Gym; add it explicitly for MuJoCo.
     robot_body = spec.worldbody.first_body()
     if robot_body is None:
         raise RuntimeError(f"No robot body found in URDF: {xml_path}")
     robot_body.add_freejoint()
+
+    # Isaac Gym exposes base_ang_vel and projected_gravity in the policy
+    # observation.  The equivalent MuJoCo source is an IMU mounted on the
+    # base.  The V1.1 URDF has no sensor section, so add the same sensor set
+    # used by resources/robots/Opendoge/xml/Opendoge.xml while compiling it.
+    imu = robot_body.add_site()
+    imu.name = "imu"
+    imu.pos = [0.0, 0.0, 0.03]
+
+    for name, sensor_type in (
+        ("orientation", mujoco.mjtSensor.mjSENS_FRAMEQUAT),
+        ("position", mujoco.mjtSensor.mjSENS_FRAMEPOS),
+        ("angular-velocity", mujoco.mjtSensor.mjSENS_GYRO),
+        ("linear-velocity", mujoco.mjtSensor.mjSENS_VELOCIMETER),
+        ("linear-acceleration", mujoco.mjtSensor.mjSENS_ACCELEROMETER),
+    ):
+        sensor = spec.add_sensor()
+        sensor.name = name
+        sensor.type = sensor_type
+        sensor.objtype = mujoco.mjtObj.mjOBJ_SITE
+        sensor.objname = imu.name
+        if name == "angular-velocity":
+            sensor.noise = 0.005
+            sensor.cutoff = 34.9
+        elif name == "linear-velocity":
+            sensor.noise = 0.001
+            sensor.cutoff = 30.0
+        elif name == "linear-acceleration":
+            sensor.noise = 0.005
+            sensor.cutoff = 157.0
+        else:
+            sensor.noise = 0.001
+
     floor = spec.worldbody.add_geom()
     floor.name = "floor"
     floor.type = mujoco.mjtGeom.mjGEOM_PLANE
@@ -150,7 +199,10 @@ def load_mujoco_model(xml_path, num_actions):
         mesh = spec.add_mesh()
         mesh.name = f"{body_name}_visual_mesh"
         mesh.file = mesh_file
-        body = spec.find_body(body_name)
+        if hasattr(spec, "find_body"):
+            body = spec.find_body(body_name)
+        else:
+            body = spec.worldbody.find_child(body_name)
         if body is None:
             raise RuntimeError(f"Visual body not found in URDF: {body_name}")
         visual = body.add_geom()
@@ -179,6 +231,18 @@ def load_mujoco_model(xml_path, num_actions):
     return model
 
 
+def resolve_policy_path(config):
+    """Resolve CLI/environment overrides before the YAML policy path."""
+    if ARGS.onnx or os.environ.get("OPENDOGE_ONNX_PATH"):
+        return resolve_onnx_path(cli_onnx=ARGS.onnx)
+
+    policy_path = config.get("policy_path")
+    if policy_path:
+        policy_path = policy_path.replace("{LEGGED_GYM_ROOT_DIR}", LEGGED_GYM_ROOT_DIR)
+        return resolve_onnx_path(cli_onnx=policy_path)
+    return resolve_onnx_path()
+
+
 def key_callback(keycode):
     global paused
     if chr(keycode) == " ":
@@ -198,6 +262,11 @@ def run_simulation():
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+
+    global ONNX_PATH
+    ONNX_PATH = resolve_policy_path(config)
+    print(f"YAML : {config_path}")
+    print(f"ONNX : {ONNX_PATH}")
 
     sim_dt = float(config.get("simulation_dt", 0.005))
     control_decimation = int(config.get("control_decimation", 2))
@@ -243,7 +312,7 @@ def run_simulation():
         _ = data.sensor("angular-velocity").data
     except KeyError:
         use_gyro_sensor = False
-        print("WARNING: sensor 'angular-velocity' not found; falling back to data.qvel[3:6].")
+        print("WARNING: sensor 'angular-velocity' not found; using body-frame angular velocity derived from qvel.")
 
     print(f"Loading ONNX: {ONNX_PATH}")
     ort_session = ort.InferenceSession(ONNX_PATH)
@@ -260,8 +329,10 @@ def run_simulation():
     target_dof_pos = default_dof_pos.copy()
     action = np.zeros(num_actions, dtype=np.float32)
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
+    listener = None
+    if keyboard is not None:
+        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
     print("Simulation running!  ↑↓ fwd/back  ←→ turn  Ctrl+←→ strafe  Space pause")
 
     history_len = max(1, num_obs // num_one_step_obs)

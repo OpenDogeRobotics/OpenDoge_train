@@ -67,7 +67,9 @@ def build_obs_raw(data, default_dof_pos, cmd, cmd_scale, ang_vel_scale,
     if use_gyro_sensor:
         omega = data.sensor("angular-velocity").data.astype(np.float32)
     else:
-        omega = data.qvel[3:6].astype(np.float32)
+        # MuJoCo free-joint angular velocity is expressed in world coordinates;
+        # Isaac Gym's base_ang_vel observation is expressed in body coordinates.
+        omega = quat_rotate_inverse(quat, data.qvel[3:6]).astype(np.float32)
 
     gravity_vec = np.array([0.0, 0.0, -1.0], dtype=np.float32)
     proj_gravity = quat_rotate_inverse(quat, gravity_vec)

@@ -12,10 +12,10 @@ control_decimation: 2
 kps: [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
 kds: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
 
-# FL FR
-# RL RR
-default_angles: [0.0, 0.6, -1.5,  0.0, 0.6, -1.5,
-                 0.0, 0.6, -1.5,  0.0, 0.6, -1.5]
+# 顺序: [FL, FR, RL, RR]，与 OpenDogV1_1 URDF / Isaac Gym DOF 顺序一致。
+# 右侧大腿和小腿关节轴方向与左侧相反，因此角度符号也镜像。
+default_angles: [0.0,  0.8, -1.6,  0.0, -0.8,  1.6,
+                 0.0,  0.8, -1.6,  0.0, -0.8,  1.6]
 
 # 观测与动作缩放（与训练配置对齐）
 lin_vel_scale: 2.0
@@ -34,4 +34,4 @@ num_one_step_obs: 45
 cmd_init: [0, 0, 0]
 
 # 基座初始化高度（与训练 cfg.init_state.pos[2] 对齐）
-init_base_height: 0.15
+init_base_height: 0.158
