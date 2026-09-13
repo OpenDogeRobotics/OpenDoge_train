@@ -26,7 +26,9 @@ OpenDoge_train/
 │       ├── modules/             # HIMActorCritic, HIMEstimator
 │       ├── runners/             # PPO/HIM/AMP runners
 │       └── storage/             # HIMRolloutStorage
-├── datasets/sdog2_motion/       # HIMloco AMP 引导数据；正式训练应替换为 OpenDoge retarget clips
+├── datasets/opendoge_motion/    # 已重定向到 OpenDoge URDF 的 S-DOG2 AMP 数据
+├── datasets/sdog2_motion/       # 旧版 S-DOG2 AMP 数据，仅作对照保留
+├── datasets/keypoint_datasets/  # HIMloco 的 AI4Animation 原始关键点数据
 ├── deploy/deploy_mujoco/        # 配置驱动的 MuJoCo 验证与诊断
 ├── resources/robots/
 │   ├── Opendoge/                # OpenDoge URDF + MuJoCo XML + STL 网格
@@ -141,6 +143,13 @@ python legged_gym/scripts/train.py --task=opendoge_rough --headless
 python legged_gym/scripts/train.py --task=opendoge_getup --headless
 python legged_gym/scripts/train.py --task=opendoge_amp --headless
 python legged_gym/scripts/train.py --task=opendoge_him_amp --headless
+```
+
+AMP 默认读取 `datasets/opendoge_motion/*.json`。这些片段由 HIMloco 的
+S-DOG2/AI4Animation 关键点数据重定向到 OpenDoge URDF；重新生成数据：
+
+```bash
+python datasets/retarget_opendoge_motions.py
 ```
 
 从 checkpoint 继续训练：

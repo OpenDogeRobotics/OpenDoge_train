@@ -5,10 +5,8 @@ import glob
 from .opendoge_base_config import OpendogeBaseCfg, OpendogeBaseCfgPPO
 
 
-# Bootstrap clips are carried over from HIMloco and keep the AMPLoader
-# contract intact.  For production AMP training, replace these with clips
-# retargeted to the OpenDoge URDF and joint-axis conventions.
-MOTION_FILES = sorted(glob.glob("datasets/sdog2_motion/*.txt"))
+# S-DOG2 clips retargeted to the OpenDoge URDF and policy joint order.
+MOTION_FILES = sorted(glob.glob("datasets/opendoge_motion/*.json"))
 
 
 class OpendogeAMPCfg(OpendogeBaseCfg):

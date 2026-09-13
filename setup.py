@@ -28,6 +28,7 @@ setup(
         "onnxruntime>=1.14",
         "pygame>=2.0",
         "pynput>=1.7",
+        "pybullet>=3.2",
         "pyyaml>=6.0",
         "scipy>=1.9",
         "tensorboard>=2.10",

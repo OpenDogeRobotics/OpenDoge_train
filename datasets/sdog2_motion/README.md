@@ -1,11 +1,14 @@
-# S-DOG2 AMP motion datasets
+# Legacy S-DOG2 AMP motion datasets
 
 Place generated S-DOG2 AMP motion clips here.
 
 Expected format is the same as `amp_go2` datasets:
 - JSON with `"Frames"` and `"FrameDuration"`, or plain text AMP transition files accepted by `rsl_rl.datasets.motion_loader.AMPLoader`.
 
-The `sdog2_amp` config scans:
+This directory is retained as the original S-DOG2 output for comparison. The
+OpenDoge AMP configs use the retargeted clips in `datasets/opendoge_motion/`.
+
+The old `sdog2_amp` config scans:
 
 ```text
 datasets/sdog2_motion/*

@@ -333,10 +333,17 @@ class AMPLoader:
                 traj_idxs = self.weighted_traj_idx_sample_batch(mini_batch_size)
                 times = self.traj_time_sample_batch(traj_idxs)
                 for traj_idx, frame_time in zip(traj_idxs, times):
-                    s.append(self.get_frame_at_time(traj_idx, frame_time))
-                    s_next.append(
-                        self.get_frame_at_time(
-                            traj_idx, frame_time + self.time_between_frames))
+                    frame = self.get_full_frame_at_time(traj_idx, frame_time)
+                    next_frame = self.get_full_frame_at_time(
+                        traj_idx, frame_time + self.time_between_frames)
+                    s.append(torch.cat([
+                        frame[AMPLoader.JOINT_POSE_START_IDX:AMPLoader.JOINT_VEL_END_IDX],
+                        frame[AMPLoader.ROOT_POS_START_IDX + 2:AMPLoader.ROOT_POS_START_IDX + 3],
+                    ]))
+                    s_next.append(torch.cat([
+                        next_frame[AMPLoader.JOINT_POSE_START_IDX:AMPLoader.JOINT_VEL_END_IDX],
+                        next_frame[AMPLoader.ROOT_POS_START_IDX + 2:AMPLoader.ROOT_POS_START_IDX + 3],
+                    ]))
                 
                 s = torch.vstack(s)
                 s_next = torch.vstack(s_next)
