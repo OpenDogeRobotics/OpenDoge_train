@@ -22,10 +22,12 @@ OpenDoge_train/
 │   ├── utils/                   # 工具 (task_registry, logger, terrain 等)
 ├── rsl_rl/                      # HIMLoco PPO 算法实现
 │   └── rsl_rl/
-│       ├── algorithms/          # HIMPPO, PPO
+│       ├── algorithms/          # PPO, HIMPPO, AMP, HIM-AMP
 │       ├── modules/             # HIMActorCritic, HIMEstimator
-│       ├── runners/             # HIMOnPolicyRunner
+│       ├── runners/             # PPO/HIM/AMP runners
 │       └── storage/             # HIMRolloutStorage
+├── datasets/sdog2_motion/       # HIMloco AMP 引导数据；正式训练应替换为 OpenDoge retarget clips
+├── deploy/deploy_mujoco/        # 配置驱动的 MuJoCo 验证与诊断
 ├── resources/robots/
 │   ├── Opendoge/                # OpenDoge URDF + MuJoCo XML + STL 网格
 │   ├── g1_description/          # G1 描述
@@ -131,6 +133,16 @@ OpenDog V1.1 使用独立任务配置：
 python legged_gym/scripts/train.py --task=opendoge_v1_1 --headless
 ```
 
+OpenDoge 的任务已按 HIMloco 的训练阶段拆分，分别维护自己的地形、奖励、随机化和日志目录：
+
+```bash
+python legged_gym/scripts/train.py --task=opendoge_flat --headless
+python legged_gym/scripts/train.py --task=opendoge_rough --headless
+python legged_gym/scripts/train.py --task=opendoge_getup --headless
+python legged_gym/scripts/train.py --task=opendoge_amp --headless
+python legged_gym/scripts/train.py --task=opendoge_him_amp --headless
+```
+
 从 checkpoint 继续训练：
 
 ```bash
@@ -143,6 +155,11 @@ python legged_gym/scripts/train.py --task=opendoge --resume --load_run <run_name
 |------|--------|
 | `opendoge` | OpenDoge |
 | `opendoge_v1_1` | OpenDog V1.1 |
+| `opendoge_flat` | OpenDoge 平地行走预训练 |
+| `opendoge_rough` | OpenDoge 粗糙地形课程训练 |
+| `opendoge_getup` | OpenDoge 翻倒恢复 |
+| `opendoge_amp` | OpenDoge AMP 行为先验训练 |
+| `opendoge_him_amp` | OpenDoge HIM + AMP 训练 |
 | `a1` | Unitree A1 |
 | `go1` | Unitree Go1 |
 
@@ -195,6 +212,10 @@ python sim2sim/sim2sim_xbox.py
 
 # 指定 ONNX 模型
 python sim2sim/sim2sim_keyboard.py --onnx onnx/flat_opendoge_9000_omni.onnx
+
+# 配置驱动的 MuJoCo 验证、固定速度运行和诊断
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --no-keyboard --cmd_vx 1.0
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration 5
 ```
 
 #### 键盘操作

@@ -30,3 +30,6 @@
 
 from .ppo import PPO
 from .him_ppo import HIMPPO
+from .amp_ppo import AMPPPO
+from .him_amp_ppo import HIMAMPPPO
+from .amp_D import AMP_Discriminator

@@ -144,7 +144,20 @@ class TaskRegistry():
             log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
         
         train_cfg_dict = class_to_dict(train_cfg)
-        runner = HIMOnPolicyRunner(env, train_cfg_dict, log_dir, device=args.rl_device)
+        runner_class_name = getattr(train_cfg.runner, "runner_class_name", "HIMOnPolicyRunner")
+        if runner_class_name == "AMPOnPolicyRunner":
+            from rsl_rl.runners.amp_on_policy_runner import AMPOnPolicyRunner
+            runner_class = AMPOnPolicyRunner
+        elif runner_class_name == "HIMAMPOnPolicyRunner":
+            from rsl_rl.runners.him_amp_on_policy_runner import HIMAMPOnPolicyRunner
+            runner_class = HIMAMPOnPolicyRunner
+        elif runner_class_name == "OnPolicyRunner":
+            runner_class = OnPolicyRunner
+        elif runner_class_name == "HIMOnPolicyRunner":
+            runner_class = HIMOnPolicyRunner
+        else:
+            raise ValueError(f"Unsupported runner_class_name: {runner_class_name}")
+        runner = runner_class(env, train_cfg_dict, log_dir, device=args.rl_device)
         #save resume path before creating a new log_dir
         resume = train_cfg.runner.resume
         if resume:
@@ -156,4 +169,3 @@ class TaskRegistry():
 
 # make global task registry
 task_registry = TaskRegistry()
-
