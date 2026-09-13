@@ -281,12 +281,14 @@ class SimWorker(threading.Thread):
         from deploy.deploy_mujoco.deploy_mujoco import (
             OpenDogeSim2Sim, resolve_config_path,
         )
+        self._safe_emit(self.bridge.sim_state, "加载策略与 V1.1 模型…")
         cfg = resolve_config_path("opendoge_v1_1.yaml")
         rt = OpenDogeSim2Sim(
             cfg,
             action_delay_steps=self.action_delay_steps,
             policy_path=self.policy_path,
         )
+        self._safe_emit(self.bridge.sim_state, "模型已加载，创建 MuJoCo 渲染器…")
         rt.reset()
         return rt
 
@@ -478,6 +480,7 @@ class SimWorker(threading.Thread):
                 sx, sy = 0.0, 0.0
             cam.distance = 0.8
             cam.lookat = np.array([sx, sy, 0.12])
+            self._safe_emit(self.bridge.sim_state, "仿真运行中")
             return rt, renderer, cam
 
         try:
@@ -488,7 +491,6 @@ class SimWorker(threading.Thread):
                             f"仿真初始化失败: {type(exc).__name__}: {exc}")
             return
 
-        self._safe_emit(self.bridge.sim_state, "仿真运行中")
         self._last_render = time.perf_counter()
 
         acc = 0.0
@@ -1086,6 +1088,8 @@ def main():
 
     panel = ControlPanel(worker, bridge)
     panel.show()
+    panel.raise_()
+    panel.activateWindow()
     panel.canvas.setFocus()
 
     worker.start()
