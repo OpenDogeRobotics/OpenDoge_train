@@ -13,6 +13,7 @@ import argparse
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+import xml.etree.ElementTree as ET
 import time
 import math
 
@@ -128,16 +129,108 @@ def get_mujoco_joint_layout(model):
     )
 
 
+def add_standard_mujoco_scene(xml_text):
+    """Add the HIMloco-style skybox, checker floor and directional light."""
+    root = ET.fromstring(xml_text)
+    worldbody = root.find("worldbody")
+    if worldbody is None:
+        raise RuntimeError("Generated MJCF has no worldbody")
+
+    visual = root.find("visual")
+    if visual is None:
+        visual = ET.Element("visual")
+        root.insert(1, visual)
+    headlight = visual.find("headlight")
+    if headlight is None:
+        headlight = ET.SubElement(visual, "headlight")
+    headlight.set("diffuse", "0.6 0.6 0.6")
+    headlight.set("ambient", "0.3 0.3 0.3")
+    headlight.set("specular", "0 0 0")
+    rgba = visual.find("rgba")
+    if rgba is None:
+        rgba = ET.SubElement(visual, "rgba")
+    rgba.set("haze", "0.15 0.25 0.35 1")
+
+    asset = root.find("asset")
+    if asset is None:
+        asset = ET.Element("asset")
+        worldbody_index = list(root).index(worldbody)
+        root.insert(worldbody_index, asset)
+
+    for child in list(asset):
+        if child.get("name") in {"skybox", "groundplane"}:
+            asset.remove(child)
+
+    ET.SubElement(
+        asset,
+        "texture",
+        {
+            "type": "skybox",
+            "builtin": "gradient",
+            "rgb1": "0.3 0.5 0.7",
+            "rgb2": "0 0 0",
+            "width": "512",
+            "height": "3072",
+        },
+    ).set("name", "skybox")
+    ET.SubElement(
+        asset,
+        "texture",
+        {
+            "type": "2d",
+            "name": "groundplane",
+            "builtin": "checker",
+            "mark": "edge",
+            "rgb1": "0.2 0.3 0.4",
+            "rgb2": "0.1 0.2 0.3",
+            "markrgb": "0.8 0.8 0.8",
+            "width": "300",
+            "height": "300",
+        },
+    )
+    ET.SubElement(
+        asset,
+        "material",
+        {
+            "name": "groundplane",
+            "texture": "groundplane",
+            "texuniform": "true",
+            "texrepeat": "5 5",
+            "reflectance": "0.2",
+        },
+    )
+
+    floor = worldbody.find("./geom[@name='floor']")
+    if floor is None:
+        floor = ET.SubElement(worldbody, "geom", {"name": "floor"})
+    floor.set("type", "plane")
+    floor.set("size", "2.5 2.5 0.05")
+    floor.set("material", "groundplane")
+    floor.set("contype", "1")
+    floor.set("conaffinity", "1")
+
+    for light in worldbody.findall("light"):
+        worldbody.remove(light)
+    ET.SubElement(
+        worldbody,
+        "light",
+        {
+            "name": "key_light",
+            "pos": "0 0 1.5",
+            "dir": "0 0 -1",
+            "directional": "true",
+        },
+    )
+    return ET.tostring(root, encoding="unicode")
+
+
 def load_mujoco_model(model_path, num_actions):
     """Load MJCF directly or compile an Isaac Gym-style V1.1 URDF."""
     model_path = Path(model_path)
     if model_path.suffix.lower() != ".urdf":
         return mujoco.MjModel.from_xml_path(str(model_path))
 
-    spec = mujoco.MjSpec()
-    parsed_spec = spec.from_file(str(model_path))
-    if parsed_spec is not None:
-        spec = parsed_spec
+    spec = mujoco.MjSpec.from_file(str(model_path))
     if hasattr(spec, "discardvisual"):
         spec.discardvisual = 0
     spec.meshdir = str(model_path.parent.parent / "meshes")
@@ -179,7 +272,6 @@ def load_mujoco_model(model_path, num_actions):
     floor.type = mujoco.mjtGeom.mjGEOM_PLANE
     floor.size = [2.5, 2.5, 0.05]
     floor.group = 2
-    floor.rgba = [0.04, 0.20, 0.62, 1.0]
     floor.contype = 1
     floor.conaffinity = 1
 
@@ -206,12 +298,8 @@ def load_mujoco_model(model_path, num_actions):
     for body_name, mesh_file in visual_meshes:
         mesh = spec.add_mesh()
         mesh.name = f"{body_name}_visual_mesh"
-        mesh.file = mesh_file
-        body = (
-            spec.find_body(body_name)
-            if hasattr(spec, "find_body")
-            else spec.worldbody.find_child(body_name)
-        )
+        mesh.file = str((model_path.parent.parent / "meshes" / mesh_file).resolve())
+        body = next((candidate for candidate in spec.bodies if candidate.name == body_name), None)
         if body is None:
             raise RuntimeError(f"Visual body not found in URDF: {body_name}")
         visual = body.add_geom()
@@ -221,9 +309,11 @@ def load_mujoco_model(model_path, num_actions):
         visual.group = 1
         visual.rgba = [0.75294, 0.75294, 0.75294, 1.0]
         visual.contype = 0
-        visual.conaffinity = 0
+        # MjSpec prunes geoms whose contype and conaffinity are both zero
+        # during compilation.  contype=0 is sufficient to keep this visual
+        # geom non-colliding; conaffinity is cleared on the compiled model.
 
-    model = spec.compile()
+    model = mujoco.MjModel.from_xml_string(add_standard_mujoco_scene(spec.to_xml()))
     for joint_id in range(1, model.njnt):
         dof_id = model.jnt_dofadr[joint_id]
         model.dof_damping[dof_id] = 0.5
@@ -1003,6 +1093,12 @@ def main():
         )
     )
     with viewer_context as viewer:
+        if viewer is not None and runtime.xml_path.suffix.lower() == ".urdf":
+            # V1.1 collision geoms remain active for physics but are hidden
+            # from the viewer; visual meshes and the checker floor stay on.
+            viewer.opt.geomgroup[:] = 0
+            viewer.opt.geomgroup[1] = 1
+            viewer.opt.geomgroup[2] = 1
         runtime.run(
             duration=duration,
             command=command,

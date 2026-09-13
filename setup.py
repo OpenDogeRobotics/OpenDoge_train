@@ -26,6 +26,7 @@ setup(
         "mujoco==3.2.3",
         "numpy>=1.20,<2.0",
         "onnxruntime>=1.14",
+        "PyQt5>=5.15",
         "pygame>=2.0",
         "pynput>=1.7",
         "pybullet>=3.2",

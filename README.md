@@ -218,6 +218,9 @@ python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration
 # OpenDog V1.1 键盘可视化
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --keyboard
 
+# OpenDog V1.1 HIMloco 风格 PyQt 内嵌界面（推荐）
+python deploy/deploy_mujoco/opendoge_v1_1_panel.py
+
 # 指定其他 V1.1 ONNX 模型
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml \
   --onnx onnx/opendoge_v1_1_directional_model_7600.onnx --keyboard
@@ -239,7 +242,7 @@ python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml \
 | START | 暂停 / 恢复 |
 | BACK | 退出仿真 |
 
-配置参数 (PD、缩放因子、默认角度等) 在 `deploy/deploy_mujoco/configs/` 中与训练配置对齐。
+配置参数 (PD、缩放因子、默认角度等) 在 `deploy/deploy_mujoco/configs/` 中与训练配置对齐。V1.1 的 PyQt 面板使用离屏 `mujoco.Renderer` 将画面嵌入 Qt 窗口，鼠标相机行为和 HIMloco 面板保持一致。
 
 ### 4. Sim2Real
 

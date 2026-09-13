@@ -12,6 +12,10 @@ python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration
 # OpenDog V1.1 URDF + policy
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --keyboard
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --validate --headless --duration 5
+
+# OpenDog V1.1 HIMloco-style embedded PyQt panel
+python deploy/deploy_mujoco/opendoge_v1_1_panel.py
+python deploy/deploy_mujoco/opendoge_v1_1_panel.py --onnx onnx/opendoge_v1_1_directional_model_7600.onnx
 ```
 
 The YAML file selects the ONNX policy, MuJoCo scene or Isaac Gym-style URDF,
@@ -20,6 +24,11 @@ optional get-up policy. The runtime uses MuJoCo actuator indices rather than
 assuming model order, maintains the 270-dimensional HIM history without
 overlapping copies, supports configurable action delay, and reports
 fall/tilt/torque/velocity diagnostics.
+
+For the V1.1 URDF path, the runtime explicitly loads the 13 visual STL meshes
+from `resources/robots/OpenDogV1.1/meshes/`. It also injects the standard MuJoCo
+gradient skybox, checker ground material, directional light, shadows, and
+reflection used by the HIMloco-style viewer.
 
 Keyboard mode uses the MuJoCo viewer callback: `W/S` forward, `A/D` lateral,
 `Q/E` yaw, number keys `1`-`5` for speed presets, and `X` for stop.
