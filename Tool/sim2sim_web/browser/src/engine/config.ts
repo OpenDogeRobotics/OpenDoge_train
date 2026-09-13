@@ -1,5 +1,5 @@
 /**
- * Configuration constants ported from sim2sim/configs/opendoge.yaml.
+ * Configuration constants ported from deploy/deploy_mujoco/configs/opendoge.yaml.
  * All values mirror the Python-side configuration exactly.
  */
 

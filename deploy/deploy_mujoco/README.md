@@ -8,14 +8,18 @@ contracts before simulation.
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --no-keyboard --cmd_vx 1.0
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --headless --duration 10 --diagnostics
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration 5
+
+# OpenDog V1.1 URDF + policy
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --keyboard
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --validate --headless --duration 5
 ```
 
-The YAML file selects the ONNX policy, MuJoCo scene, explicit Isaac Gym joint
-order, PD gains, torque limits, observation dimensions, and optional get-up
-policy. The runtime uses MuJoCo actuator indices rather than assuming XML
-order, maintains the 270-dimensional HIM history without overlapping copies,
-supports configurable action delay, and reports fall/tilt/torque/velocity
-diagnostics.
+The YAML file selects the ONNX policy, MuJoCo scene or Isaac Gym-style URDF,
+explicit joint order, PD gains, torque limits, observation dimensions, and
+optional get-up policy. The runtime uses MuJoCo actuator indices rather than
+assuming model order, maintains the 270-dimensional HIM history without
+overlapping copies, supports configurable action delay, and reports
+fall/tilt/torque/velocity diagnostics.
 
 Keyboard mode uses the MuJoCo viewer callback: `W/S` forward, `A/D` lateral,
 `Q/E` yaw, number keys `1`-`5` for speed presets, and `X` for stop.

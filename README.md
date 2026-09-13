@@ -35,13 +35,6 @@ OpenDoge_train/
 │   ├── g1_description/          # G1 描述
 │   ├── go1/ go2/                # Go1 / Go2 模型
 │   └── h1/ h1_2/                # H1 模型
-├── sim2sim/                     # MuJoCo Sim2Sim 迁移测试 (键盘/手柄)
-│   ├── _common.py               # 共享工具 (观测构建, PD控制, 四元数)
-│   ├── onnx_utils.py            # ONNX 路径解析
-│   ├── configs/
-│   │   └── opendoge.yaml        # Sim2Sim 配置 (PD/缩放/默认角度)
-│   ├── sim2sim_keyboard.py      # 键盘控制前端
-│   └── sim2sim_xbox.py          # XBOX 手柄控制前端
 ├── Tool/                        # 辅助工具
 │   ├── check_urdf.py            # URDF 验证
 │   └── simplify_mesh.py         # 网格减面
@@ -208,23 +201,26 @@ python legged_gym/scripts/play.py --task=opendoge --load_run <run_name> --checkp
 tensorboard --logdir=./logs/
 ```
 
-### 3. Sim2Sim (MuJoCo 迁移测试)
+### 3. MuJoCo Deploy / Sim2Sim
 
 训练完成后，在 MuJoCo 中实时验证策略迁移效果：
 
 ```bash
-# 键盘控制
-python sim2sim/sim2sim_keyboard.py
+# OpenDoge 键盘可视化
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --keyboard
 
-# XBOX 手柄控制
-python sim2sim/sim2sim_xbox.py
-
-# 指定 ONNX 模型
-python sim2sim/sim2sim_keyboard.py --onnx onnx/flat_opendoge_9000_omni.onnx
-
-# 配置驱动的 MuJoCo 验证、固定速度运行和诊断
+# OpenDoge 固定速度运行和诊断
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --no-keyboard --cmd_vx 1.0
+
+# OpenDoge 策略验证
 python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration 5
+
+# OpenDog V1.1 键盘可视化
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml --keyboard
+
+# 指定其他 V1.1 ONNX 模型
+python deploy/deploy_mujoco/deploy_mujoco.py opendoge_v1_1.yaml \
+  --onnx onnx/opendoge_v1_1_directional_model_7600.onnx --keyboard
 ```
 
 #### 键盘操作
@@ -243,7 +239,7 @@ python deploy/deploy_mujoco/deploy_mujoco.py opendoge.yaml --validate --duration
 | START | 暂停 / 恢复 |
 | BACK | 退出仿真 |
 
-配置参数 (PD、缩放因子、默认角度等) 在 `sim2sim/configs/opendoge.yaml` 中与训练配置对齐。
+配置参数 (PD、缩放因子、默认角度等) 在 `deploy/deploy_mujoco/configs/` 中与训练配置对齐。
 
 ### 4. Sim2Real
 

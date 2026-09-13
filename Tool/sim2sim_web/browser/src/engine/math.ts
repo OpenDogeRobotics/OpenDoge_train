@@ -1,5 +1,5 @@
 /**
- * Core math functions ported from sim2sim/_common.py.
+ * Core math functions ported from deploy/deploy_mujoco/common.py.
  *
  * All functions operate on Float32Array / Float64Array to mirror MuJoCo's
  * internal representation and minimize GC pressure.

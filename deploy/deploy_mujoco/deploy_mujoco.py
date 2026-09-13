@@ -128,6 +128,113 @@ def get_mujoco_joint_layout(model):
     )
 
 
+def load_mujoco_model(model_path, num_actions):
+    """Load MJCF directly or compile an Isaac Gym-style V1.1 URDF."""
+    model_path = Path(model_path)
+    if model_path.suffix.lower() != ".urdf":
+        return mujoco.MjModel.from_xml_path(str(model_path))
+
+    spec = mujoco.MjSpec()
+    parsed_spec = spec.from_file(str(model_path))
+    if parsed_spec is not None:
+        spec = parsed_spec
+    if hasattr(spec, "discardvisual"):
+        spec.discardvisual = 0
+    spec.meshdir = str(model_path.parent.parent / "meshes")
+
+    robot_body = spec.worldbody.first_body()
+    if robot_body is None:
+        raise RuntimeError(f"No robot body found in URDF: {model_path}")
+    robot_body.add_freejoint()
+
+    imu = robot_body.add_site()
+    imu.name = "imu"
+    imu.pos = [0.0, 0.0, 0.03]
+    for name, sensor_type in (
+        ("orientation", mujoco.mjtSensor.mjSENS_FRAMEQUAT),
+        ("position", mujoco.mjtSensor.mjSENS_FRAMEPOS),
+        ("angular-velocity", mujoco.mjtSensor.mjSENS_GYRO),
+        ("linear-velocity", mujoco.mjtSensor.mjSENS_VELOCIMETER),
+        ("linear-acceleration", mujoco.mjtSensor.mjSENS_ACCELEROMETER),
+    ):
+        sensor = spec.add_sensor()
+        sensor.name = name
+        sensor.type = sensor_type
+        sensor.objtype = mujoco.mjtObj.mjOBJ_SITE
+        sensor.objname = imu.name
+        if name == "angular-velocity":
+            sensor.noise = 0.005
+            sensor.cutoff = 34.9
+        elif name == "linear-velocity":
+            sensor.noise = 0.001
+            sensor.cutoff = 30.0
+        elif name == "linear-acceleration":
+            sensor.noise = 0.005
+            sensor.cutoff = 157.0
+        else:
+            sensor.noise = 0.001
+
+    floor = spec.worldbody.add_geom()
+    floor.name = "floor"
+    floor.type = mujoco.mjtGeom.mjGEOM_PLANE
+    floor.size = [2.5, 2.5, 0.05]
+    floor.group = 2
+    floor.rgba = [0.04, 0.20, 0.62, 1.0]
+    floor.contype = 1
+    floor.conaffinity = 1
+
+    for name in POLICY_JOINT_NAMES[:num_actions]:
+        actuator = spec.add_actuator()
+        actuator.name = name
+        actuator.trntype = mujoco.mjtTrn.mjTRN_JOINT
+        actuator.target = name
+        limit = 9.0 if "calf" in name else 6.0
+        actuator.ctrlrange = [-limit, limit]
+        actuator.ctrllimited = True
+
+    visual_meshes = [
+        ("base_link", "base_link.STL"),
+        ("FL_hip", "FL_hip.STL"), ("FL_thigh", "FL_thigh.STL"),
+        ("FL_calf", "FL_calf.STL"),
+        ("FR_hip", "FR_hip.STL"), ("FR_thigh", "FR_thigh.STL"),
+        ("FR_calf", "FR_calf.STL"),
+        ("RL_hip", "RL_hip.STL"), ("RL_thigh", "RL_thigh.STL"),
+        ("RL_calf", "RL_calf.STL"),
+        ("RR_hip", "RR_hip.STL"), ("RR_thigh", "RR_thigh.STL"),
+        ("RR_calf", "RR_calf.STL"),
+    ]
+    for body_name, mesh_file in visual_meshes:
+        mesh = spec.add_mesh()
+        mesh.name = f"{body_name}_visual_mesh"
+        mesh.file = mesh_file
+        body = (
+            spec.find_body(body_name)
+            if hasattr(spec, "find_body")
+            else spec.worldbody.find_child(body_name)
+        )
+        if body is None:
+            raise RuntimeError(f"Visual body not found in URDF: {body_name}")
+        visual = body.add_geom()
+        visual.name = f"{body_name}_visual"
+        visual.type = mujoco.mjtGeom.mjGEOM_MESH
+        visual.meshname = mesh.name
+        visual.group = 1
+        visual.rgba = [0.75294, 0.75294, 0.75294, 1.0]
+        visual.contype = 0
+        visual.conaffinity = 0
+
+    model = spec.compile()
+    for joint_id in range(1, model.njnt):
+        dof_id = model.jnt_dofadr[joint_id]
+        model.dof_damping[dof_id] = 0.5
+        model.dof_armature[dof_id] = 0.01
+    for geom_id in range(model.ngeom):
+        if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_MESH:
+            model.geom_contype[geom_id] = 0
+            model.geom_conaffinity[geom_id] = 0
+    return model
+
+
 @dataclass
 class RuntimeDiagnostics:
     min_base_height: float = float("inf")
@@ -161,7 +268,8 @@ class RuntimeDiagnostics:
 class OpenDogeSim2Sim:
     """Policy, MuJoCo state and policy-rate control contract."""
 
-    def __init__(self, config_path, action_delay_steps=None, hfield_data=None):
+    def __init__(self, config_path, action_delay_steps=None, hfield_data=None,
+                 policy_path=None):
         self.config_path = Path(config_path)
         with self.config_path.open("r") as stream:
             self.cfg = yaml.safe_load(stream)
@@ -206,7 +314,8 @@ class OpenDogeSim2Sim:
         self.num_one_step = int(self.cfg["num_one_step_obs"])
         self._validate_dimensions()
 
-        self.policy_path = resolve_project_path(self.cfg["policy_path"])
+        configured_policy_path = policy_path or self.cfg["policy_path"]
+        self.policy_path = resolve_project_path(configured_policy_path)
         self.xml_path = resolve_project_path(self.cfg["xml_path"])
         self.session = ort.InferenceSession(
             str(self.policy_path), providers=["CPUExecutionProvider"]
@@ -230,7 +339,7 @@ class OpenDogeSim2Sim:
         self._recovery_stable_steps = 0
         self._RECOVERY_STABLE_NEEDED = 50  # ~1s at 50Hz
 
-        self.model = mujoco.MjModel.from_xml_path(str(self.xml_path))
+        self.model = load_mujoco_model(self.xml_path, self.num_actions)
         self.model.opt.timestep = self.sim_dt
         if hfield_data is not None and self.model.nhfield == 0:
             raise ValueError("hfield_data given but model has no heightfield")
@@ -838,6 +947,8 @@ def parse_args():
                         help="Run validation cases (forward/lateral/yaw)")
     parser.add_argument("--action_delay_steps", type=int, default=None,
                         help="Action delay in sim substeps [0, decimation)")
+    parser.add_argument("--onnx", type=str, default=None,
+                        help="Override the ONNX policy path from YAML")
     return parser.parse_args()
 
 
@@ -848,6 +959,7 @@ def main():
     runtime = OpenDogeSim2Sim(
         config_path,
         action_delay_steps=args.action_delay_steps,
+        policy_path=args.onnx,
     )
     print_model_summary(runtime.model_summary())
 

@@ -1,8 +1,8 @@
 """
 Sim2Sim engine — pure MuJoCo + ONNX Runtime, no Isaac Gym / ROS dependency.
 
-Reuses sim2sim/_common.py for observation building, PD control, and policy input
-packing.  Provides a step() API for external control loops (web server, etc.).
+Reuses deploy/deploy_mujoco/common.py for observation building, PD control, and
+policy input packing. Provides a step() API for external control loops.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from io import BytesIO
 from PIL import Image
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
-from sim2sim._common import (
+from deploy.deploy_mujoco.common import (
     quat_rotate_inverse,
     pd_control,
     build_policy_input,
@@ -27,8 +27,8 @@ from sim2sim._common import (
 )
 
 # ── paths ────────────────────────────────────────────────────────────
-_SIM2SIM_DIR = os.path.join(LEGGED_GYM_ROOT_DIR, "sim2sim")
-_YAML_PATH = os.path.join(_SIM2SIM_DIR, "configs", "opendoge.yaml")
+_DEPLOY_DIR = os.path.join(LEGGED_GYM_ROOT_DIR, "deploy", "deploy_mujoco")
+_YAML_PATH = os.path.join(_DEPLOY_DIR, "configs", "opendoge.yaml")
 _DEFAULT_XML = os.path.join(
     LEGGED_GYM_ROOT_DIR, "resources", "robots", "Opendoge", "xml", "scene.xml"
 )
