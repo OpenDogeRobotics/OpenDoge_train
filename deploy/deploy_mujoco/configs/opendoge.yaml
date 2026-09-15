@@ -1,4 +1,4 @@
-policy_path: "{LEGGED_GYM_ROOT_DIR}/onnx/flat_opendoge_9000_omni.onnx"
+policy_path: "{LEGGED_GYM_ROOT_DIR}/onnx/opendoge_v1_1_reward4438_model_9000.onnx"
 xml_path: "{LEGGED_GYM_ROOT_DIR}/resources/robots/Opendoge/xml/scene.xml"
 base_body_name: "robot"
 
@@ -6,7 +6,7 @@ simulation_duration: 60.0
 simulation_dt: 0.005
 control_decimation: 2
 settle_duration: 1.0
-initial_base_height: 0.15
+initial_base_height: 0.158
 fall_base_height: 0.08
 recovered_base_height: 0.13
 action_delay_steps: 0
@@ -21,13 +21,13 @@ kds: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
       0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
 torque_limits: [6.0, 6.0, 9.0, 6.0, 6.0, 9.0,
                 6.0, 6.0, 9.0, 6.0, 6.0, 9.0]
-default_angles: [0.0, 0.6, -1.5, 0.0, 0.6, -1.5,
-                  0.0, 0.6, -1.5, 0.0, 0.6, -1.5]
+default_angles: [0.0, 0.8, -1.6, 0.0, -0.8, 1.6,
+                  0.0, 0.8, -1.6, 0.0, -0.8, 1.6]
 
 ang_vel_scale: 0.25
 dof_pos_scale: 1.0
 dof_vel_scale: 0.05
-action_scale: 0.30
+action_scale: 0.25
 cmd_scale: [2.0, 2.0, 0.25]
 num_actions: 12
 num_obs: 270
