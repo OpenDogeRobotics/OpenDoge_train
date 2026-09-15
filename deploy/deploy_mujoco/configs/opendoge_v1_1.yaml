@@ -28,7 +28,7 @@ default_angles: [0.0, 0.8, -1.6, 0.0, -0.8, 1.6,
 ang_vel_scale: 0.25
 dof_pos_scale: 1.0
 dof_vel_scale: 0.05
-action_scale: 0.30
+action_scale: 0.25
 cmd_scale: [2.0, 2.0, 0.25]
 num_actions: 12
 num_obs: 270
