@@ -697,6 +697,8 @@ class OpenDogeSim2Sim:
                 {self.policy_input.name: self.obs_history.astype(np.float32, copy=False)}
             )[0].squeeze().astype(np.float32, copy=False)
 
+        # Match Isaac Gym LeggedRobot.step(): actions are clipped before PD control.
+        self.action = np.clip(self.action, -1.0, 1.0)
         self.action_phase = 0
 
         rotation = self.data.xmat[self.base_body_id].reshape(3, 3)
