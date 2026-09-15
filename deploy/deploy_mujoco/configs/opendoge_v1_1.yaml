@@ -1,6 +1,7 @@
-policy_path: "{LEGGED_GYM_ROOT_DIR}/onnx/opendoge_v1_1_model_9000.onnx"
+policy_path: "{LEGGED_GYM_ROOT_DIR}/onnx/opendoge_v1_1_flat_best_24400.onnx"
 xml_path: "{LEGGED_GYM_ROOT_DIR}/resources/robots/OpenDogV1.1/urdf/OpenDogV1_1.urdf"
 base_body_name: "base_link"
+joint_armature: 0.005
 
 simulation_duration: 60.0
 simulation_dt: 0.005

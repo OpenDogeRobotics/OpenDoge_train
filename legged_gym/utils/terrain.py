@@ -45,7 +45,22 @@ class Terrain:
             return
         self.env_length = cfg.terrain_length
         self.env_width = cfg.terrain_width
-        self.proportions = [np.sum(cfg.terrain_proportions[:i+1]) for i in range(len(cfg.terrain_proportions))]
+        # The generator below has seven terrain buckets.  Older configs only
+        # provided five proportions, which made the rare final bucket index
+        # past the end of the cumulative list and crashed terrain creation.
+        raw_proportions = np.asarray(cfg.terrain_proportions, dtype=np.float32)
+        if raw_proportions.size == 0 or np.any(raw_proportions < 0):
+            raise ValueError("terrain_proportions must contain non-negative values")
+        total = float(raw_proportions.sum())
+        if total <= 0.0:
+            raise ValueError("terrain_proportions must have a positive sum")
+        raw_proportions = raw_proportions / total
+        if raw_proportions.size < 7:
+            raw_proportions = np.pad(
+                raw_proportions, (0, 7 - raw_proportions.size), constant_values=0.0
+            )
+        self.proportions = np.cumsum(raw_proportions).tolist()
+        self.proportions[-1] = 1.0
 
         self.cfg.num_sub_terrains = cfg.num_rows * cfg.num_cols
         self.env_origins = np.zeros((cfg.num_rows, cfg.num_cols, 3))
@@ -113,14 +128,26 @@ class Terrain:
                                 length=self.width_per_env_pixels,
                                 vertical_scale=self.cfg.vertical_scale,
                                 horizontal_scale=self.cfg.horizontal_scale)
-        slope = difficulty * 0.4
-        amplitude = 0.01 + 0.07 * difficulty
-        step_height = 0.05 + 0.18 * difficulty
-        discrete_obstacles_height = 0.05 + difficulty * 0.1
-        stepping_stones_size = 1.5 * (1.05 - difficulty)
-        stone_distance = 0.05 if difficulty==0 else 0.1
-        gap_size = 1. * difficulty
-        pit_depth = 1. * difficulty
+        difficulty *= getattr(self.cfg, "difficulty_scale", 1.0)
+        terrain_height_min = getattr(self.cfg, "terrain_height_min", 0.01)
+        terrain_height_max = getattr(self.cfg, "terrain_height_max", 0.1)
+        terrain_height = terrain_height_min + (
+            terrain_height_max - terrain_height_min
+        ) * np.clip(difficulty, 0.0, 1.0)
+        slope = difficulty * getattr(self.cfg, "slope_scale", 0.4)
+        amplitude = terrain_height
+        step_height = terrain_height
+        discrete_obstacles_height = terrain_height
+        stepping_stones_size = getattr(self.cfg, "stone_size", 1.5) * (1.05 - difficulty)
+        stone_distance = getattr(self.cfg, "stone_distance", 0.1)
+        gap_size = min(
+            getattr(self.cfg, "gap_scale", 1.0) * difficulty,
+            terrain_height_max,
+        )
+        pit_depth = min(
+            getattr(self.cfg, "pit_scale", 1.0) * difficulty,
+            terrain_height_max,
+        )
         if choice < self.proportions[0]:
             if choice < self.proportions[0]/ 2:
                 slope *= -1

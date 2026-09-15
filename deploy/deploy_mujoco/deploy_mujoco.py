@@ -224,13 +224,27 @@ def add_standard_mujoco_scene(xml_text):
     return ET.tostring(root, encoding="unicode")
 
 
-def load_mujoco_model(model_path, num_actions):
-    """Load MJCF directly or compile an Isaac Gym-style V1.1 URDF."""
+def load_mujoco_model(model_path, num_actions, joint_armature=0.01):
+    """Load MJCF directly or compile an Isaac Gym-style V1.1 URDF.
+
+    ``joint_armature`` is explicit because it is part of the sim2sim
+    contract.  The V1.1 training config uses 0.005, while older deployments
+    used 0.01.
+    """
     model_path = Path(model_path)
     if model_path.suffix.lower() != ".urdf":
         return mujoco.MjModel.from_xml_path(str(model_path))
 
-    spec = mujoco.MjSpec.from_file(str(model_path))
+    # MuJoCo 3.2 exposes ``from_file`` as an instance method, while newer
+    # releases also accept the class-style call. Support both so the panel
+    # works with the pinned himloco environment and newer local installs.
+    spec_instance_api = False
+    try:
+        spec = mujoco.MjSpec.from_file(str(model_path))
+    except TypeError:
+        spec = mujoco.MjSpec()
+        spec.from_file(str(model_path))
+        spec_instance_api = True
     if hasattr(spec, "discardvisual"):
         spec.discardvisual = 0
     spec.meshdir = str(model_path.parent.parent / "meshes")
@@ -299,7 +313,14 @@ def load_mujoco_model(model_path, num_actions):
         mesh = spec.add_mesh()
         mesh.name = f"{body_name}_visual_mesh"
         mesh.file = str((model_path.parent.parent / "meshes" / mesh_file).resolve())
-        body = next((candidate for candidate in spec.bodies if candidate.name == body_name), None)
+        if hasattr(spec, "find_body"):
+            body = spec.find_body(body_name)
+        else:
+            body = next(
+                (candidate for candidate in spec.bodies
+                 if candidate.name == body_name),
+                None,
+            )
         if body is None:
             raise RuntimeError(f"Visual body not found in URDF: {body_name}")
         visual = body.add_geom()
@@ -313,11 +334,16 @@ def load_mujoco_model(model_path, num_actions):
         # during compilation.  contype=0 is sufficient to keep this visual
         # geom non-colliding; conaffinity is cleared on the compiled model.
 
-    model = mujoco.MjModel.from_xml_string(add_standard_mujoco_scene(spec.to_xml()))
+    if spec_instance_api:
+        # MuJoCo 3.2.x cannot serialize an uncompiled MjSpec. The floor and
+        # robot geoms have already been added above, so compile directly.
+        model = spec.compile()
+    else:
+        model = mujoco.MjModel.from_xml_string(add_standard_mujoco_scene(spec.to_xml()))
     for joint_id in range(1, model.njnt):
         dof_id = model.jnt_dofadr[joint_id]
         model.dof_damping[dof_id] = 0.5
-        model.dof_armature[dof_id] = 0.01
+        model.dof_armature[dof_id] = float(joint_armature)
     for geom_id in range(model.ngeom):
         if model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_MESH:
             model.geom_contype[geom_id] = 0
@@ -429,7 +455,11 @@ class OpenDogeSim2Sim:
         self._recovery_stable_steps = 0
         self._RECOVERY_STABLE_NEEDED = 50  # ~1s at 50Hz
 
-        self.model = load_mujoco_model(self.xml_path, self.num_actions)
+        self.model = load_mujoco_model(
+            self.xml_path,
+            self.num_actions,
+            joint_armature=float(self.cfg.get("joint_armature", 0.01)),
+        )
         self.model.opt.timestep = self.sim_dt
         if hfield_data is not None and self.model.nhfield == 0:
             raise ValueError("hfield_data given but model has no heightfield")
@@ -564,7 +594,9 @@ class OpenDogeSim2Sim:
 
                 one_step = np.zeros(self.num_one_step, dtype=np.float32)
                 one_step[0:3] = cmd0 * self.cmd_scale
-                one_step[3:6] = self.data.qvel[3:6] * self.ang_vel_scale
+                rotation = self.data.xmat[self.base_body_id].reshape(3, 3)
+                body_ang_vel = rotation.T @ self.data.qvel[3:6]
+                one_step[3:6] = body_ang_vel * self.ang_vel_scale
                 one_step[6:9] = gravity
                 one_step[9:21] = (qj - self.default_angles) * self.dof_pos_scale
                 one_step[21:33] = dqj * self.dof_vel_scale
@@ -639,7 +671,9 @@ class OpenDogeSim2Sim:
 
         # Command (zero during recovery)
         one_step[0:3] = 0.0 if (self._in_recovery and self.getup_session is not None) else command * self.cmd_scale
-        one_step[3:6] = self.data.qvel[3:6] * self.ang_vel_scale
+        rotation = self.data.xmat[self.base_body_id].reshape(3, 3)
+        body_ang_vel = rotation.T @ self.data.qvel[3:6]
+        one_step[3:6] = body_ang_vel * self.ang_vel_scale
         one_step[6:9] = gravity
         one_step[9:21] = (qj - self.default_angles) * self.dof_pos_scale
         one_step[21:33] = dqj * self.dof_vel_scale
@@ -668,7 +702,7 @@ class OpenDogeSim2Sim:
         rotation = self.data.xmat[self.base_body_id].reshape(3, 3)
         body_velocity = rotation.T @ self.data.qvel[:3]
         self.diagnostics.velocity_sum += body_velocity
-        self.diagnostics.angular_velocity_sum += self.data.qvel[3:6]
+        self.diagnostics.angular_velocity_sum += body_ang_vel
         self.diagnostics.velocity_samples += 1
         self.diagnostics.max_abs_action = max(
             self.diagnostics.max_abs_action,
