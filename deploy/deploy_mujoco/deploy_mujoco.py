@@ -553,12 +553,7 @@ class OpenDogeSim2Sim:
 
     def reset(self):
         mujoco.mj_resetData(self.model, self.data)
-        self.data.qpos[self.qpos_indices] = self.default_angles
-        # optional spawn offset (e.g. on a competition field); defaults to origin
-        start_xy = self.cfg.get("initial_base_pos", [0.0, 0.0])
-        self.data.qpos[0] = float(start_xy[0])
-        self.data.qpos[1] = float(start_xy[1])
-        self.data.qpos[2] = float(self.cfg.get("initial_base_height", 0.35))
+        self._reset_pose()
         mujoco.mj_forward(self.model, self.data)
 
         self.action = np.zeros(self.num_actions, dtype=np.float32)
@@ -605,6 +600,19 @@ class OpenDogeSim2Sim:
 
         self.run_start_time = self.data.time
         self.diagnostics = RuntimeDiagnostics()
+
+    def _reset_pose(self):
+        """Write the training initial pose into MuJoCo state explicitly."""
+        self.data.qpos[self.qpos_indices] = self.default_angles
+        start_xy = self.cfg.get("initial_base_pos", [0.0, 0.0])
+        self.data.qpos[0] = float(start_xy[0])
+        self.data.qpos[1] = float(start_xy[1])
+        self.data.qpos[2] = float(
+            self.cfg.get("initial_base_height", 0.158)
+        )
+        self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+        self.data.qvel[:] = 0.0
+        self.data.ctrl[:] = 0.0
 
     @property
     def next_step_is_policy_tick(self):

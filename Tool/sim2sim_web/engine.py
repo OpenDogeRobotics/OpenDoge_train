@@ -66,7 +66,17 @@ class Sim2SimEngine:
         self.num_actions = int(cfg.get("num_actions", 12))
         self.num_obs = int(cfg.get("num_obs", 270))
         self.num_one_step_obs = int(cfg.get("num_one_step_obs", 45))
-        self.init_base_height = float(cfg.get("init_base_height", 0.15))
+        # Keep the MuJoCo reset pose identical to the training init_state.
+        # ``initial_base_height`` is the deploy config key; the older
+        # ``init_base_height`` spelling is accepted for existing configs.
+        self.init_base_pos = np.asarray(
+            cfg.get("initial_base_pos", [0.0, 0.0]), dtype=np.float64
+        )
+        if self.init_base_pos.shape != (2,):
+            raise ValueError("initial_base_pos must contain [x, y]")
+        self.init_base_height = float(
+            cfg.get("initial_base_height", cfg.get("init_base_height", 0.158))
+        )
 
         self.kps = np.array(cfg["kps"], dtype=np.float32)
         self.kds = np.array(cfg["kds"], dtype=np.float32)
@@ -426,8 +436,18 @@ class Sim2SimEngine:
 
     def _reset_pose(self):
         d = self.data
+
+        # The free joint occupies qpos[0:7]: position followed by (w, x, y, z).
+        # Write every component explicitly because the XML's body ``pos`` is
+        # only the compiled default and reset must also recover from a fall.
+        d.qpos[0:3] = [
+            self.init_base_pos[0],
+            self.init_base_pos[1],
+            self.init_base_height,
+        ]
+        d.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
         d.qpos[7:7 + self.num_actions] = self.default_dof_pos
-        d.qpos[2] = self.init_base_height
+        d.ctrl[:] = 0.0
         d.qvel[:] = 0.0
         mujoco.mj_forward(self.model, d)
 
