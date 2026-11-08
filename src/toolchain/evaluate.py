@@ -1,0 +1,686 @@
+"""Headless policy evaluation for the OpenDoge skills.
+
+Reward curves are not acceptance evidence: a policy can farm a shaped reward
+while doing nothing recognisable. This script runs a checkpoint deterministically
+and reports the physical quantities that define each skill, so a task can be
+accepted or rejected on measurements.
+
+Usage::
+
+  uv run opendoge-eval LainLab-OpenDoge-Handstand \
+      --checkpoint logs/opendoge_handstand/lainlab_opendoge_handstand/<run>/model_4999.pt
+  uv run opendoge-eval LainLab-OpenDoge-Jump --checkpoint ... --num-envs 64
+  uv run opendoge-eval LainLab-OpenDoge-Skills-Flat --checkpoint ...
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+import torch
+from mjlab.envs import ManagerBasedRlEnv
+from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
+from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+from mjlab.utils.torch import configure_torch_backends
+
+import src.tasks  # noqa: F401
+from src.tasks.jump.mdp.command import JumpCommand
+from src.tasks.multiskill.mdp.command import SKILL_NAMES, SkillCommandTerm
+
+STANDING_HEIGHT = 0.151
+HANDSTAND_HEIGHT = 0.220
+HANDSTAND_ALIGNMENT_THRESHOLD = 0.9  # ~25 degrees off vertical
+JUMP_RISE_TARGET = 0.05
+
+
+def _contact_flags(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+  sensor = env.scene[sensor_name]
+  found = sensor.data.found
+  assert found is not None
+  flags = (found > 0).to(torch.float32)
+  if flags.dim() == 3:
+    flags = flags.amax(dim=-1)
+  return flags
+
+
+def _height(env: ManagerBasedRlEnv) -> torch.Tensor:
+  robot = env.scene["robot"]
+  return robot.data.root_link_pos_w[:, 2] - env.scene.env_origins[:, 2]
+
+
+def _alignment(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Handstand alignment: 1 when the body is pitched to vertical."""
+  robot = env.scene["robot"]
+  target = torch.tensor([1.0, 0.0, 0.0], device=env.device)
+  return torch.clamp(robot.data.projected_gravity_b @ target, -1.0, 1.0)
+
+
+def _upright(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Nominal uprightness: 1 when the body is level, used for walk/get-up."""
+  robot = env.scene["robot"]
+  target = torch.tensor([0.0, 0.0, -1.0], device=env.device)
+  return torch.clamp(robot.data.projected_gravity_b @ target, -1.0, 1.0)
+
+
+def build_policy_env(
+  task_id: str,
+  checkpoint: Path,
+  *,
+  num_envs: int,
+  device: str,
+  corruption: bool = False,
+  train_config: bool = False,
+  seed: int | None = None,
+) -> tuple[ManagerBasedRlEnv, Any]:
+  """Build the evaluation environment and load the policy.
+
+  Three measurement conditions are supported, and they isolate different things:
+
+  - default (play config): clean observations, no perturbations, no episode
+    resets -- this is what a hand-tuned demo measures
+  - ``corruption=True``: the play config with the actor's observation corruption
+    switched back on, which is what the policy saw during training and what a
+    real IMU/encoder pipeline supplies
+  - ``train_config=True``: the training config outright, adding the interval
+    push events and the 10 s episode resets
+
+  ``seed`` pins the environment randomization so repeated runs are comparable.
+  """
+  configure_torch_backends()
+  cfg = load_env_cfg(task_id, play=not train_config)
+  cfg.scene.num_envs = num_envs
+  if seed is not None:
+    cfg.seed = seed
+  if corruption:
+    cfg.observations["actor"].enable_corruption = True
+  agent_cfg = load_rl_cfg(task_id)
+  env = ManagerBasedRlEnv(cfg=cfg, device=device)
+  wrapped = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+  runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
+  runner = runner_cls(wrapped, asdict(agent_cfg), device=device)
+  runner.load(
+    str(checkpoint), load_cfg={"actor": True}, strict=True, map_location=device
+  )
+  return env, runner.get_inference_policy(device=device)
+
+
+def evaluate(
+  task_id: str,
+  checkpoint: Path,
+  *,
+  num_envs: int,
+  steps: int,
+  device: str,
+  corruption: bool = False,
+  train_config: bool = False,
+  seed: int | None = None,
+) -> dict[str, object]:
+  env, policy = build_policy_env(
+    task_id,
+    checkpoint,
+    num_envs=num_envs,
+    device=device,
+    corruption=corruption,
+    train_config=train_config,
+    seed=seed,
+  )
+
+  names = ["walk", "handstand", "getup", "jump"]
+  per_skill: dict[str, dict[str, list]] = {
+    name: {
+      "height": [],
+      "alignment": [],
+      "feet_down": [],
+      "drift": [],
+      "airborne": [],
+      "upright": [],
+      "velocity_error": [],
+      "foot_contact": [],
+    }
+    for name in names
+  }
+  start_xy: torch.Tensor | None = None
+  jump_takeoffs = 0
+  jump_recoveries = 0
+  was_airborne = torch.zeros(num_envs, dtype=torch.bool, device=device)
+  was_recovered = torch.zeros(num_envs, dtype=torch.bool, device=device)
+  # Independent four-foot takeoff timing: measured from the contact sensor here
+  # rather than read from the command term, so "the feet left together" is not
+  # just the reward's own bookkeeping reported back.
+  foot_was_contact = torch.zeros(num_envs, 4, dtype=torch.bool, device=device)
+  foot_liftoff = torch.full((num_envs, 4), -1, dtype=torch.long, device=device)
+  step_counter = 0
+  takeoff_pending = torch.zeros(num_envs, dtype=torch.bool, device=device)
+  takeoff_spreads: dict[str, list[float]] = {name: [] for name in names}
+  # Airborne run lengths. The airborne *fraction* alone cannot tell a discrete
+  # jump from a bounce: five 0.14 s bounces and one 0.7 s flight both fill a
+  # 0.75 s reward window. Only the run-length distribution separates them, so it
+  # is measured and reported rather than inferred.
+  air_run = torch.zeros(num_envs, dtype=torch.long, device=device)
+  air_runs: dict[str, list[int]] = {name: [] for name in names}
+  # Apex of each individual flight. The global height maximum only proves that
+  # *one* flight anywhere in the episode got high enough, which a bouncing
+  # policy satisfies by accident; the per-flight distribution is what says
+  # whether every jump clears the bar.
+  air_peak = torch.full((num_envs,), -1.0, device=device)
+  air_peaks: dict[str, list[float]] = {name: [] for name in names}
+  env_steps: dict[str, int] = {name: 0 for name in names}
+
+  observation, _ = env.reset()
+  # Single-skill tasks call their command term `twist` or `jump`; the unified
+  # task calls it `skill`. Discover it rather than assuming.
+  active_commands = list(env.command_manager.active_terms)
+  skill_term_name = active_commands[0] if active_commands else "twist"
+  skill_term = env.command_manager.get_term(skill_term_name)
+
+  # Flight window of the jump, read from whichever command term owns the jump
+  # state so the measurement cannot drift from the reward.
+  term_cfg = skill_term.cfg if skill_term is not None else None
+  jump_flight_window = getattr(term_cfg, "flight_window", None) or getattr(
+    term_cfg, "jump_flight_window", (0.10, 0.22)
+  )
+  # Contact-pattern criterion for "all four feet left the ground together",
+  # taken from the Go2 moving-jump task (`jump_contact_match` in
+  # `src/tasks/robots/go2/skills/jump/mdp/rewards.py`): at every step the four
+  # feet must share one contact state. It needs no per-foot liftoff timestamps,
+  # so unlike the spread metric it cannot select the takeoffs it can measure --
+  # a staggered push-off simply has steps with mixed contact states.
+  split_contact_steps = 0
+  window_steps = 0
+  # Length of the mixed-contact run immediately before each takeoff: the real
+  # push-off stagger, read off the contact pattern. `takeoff_spread_mean` is
+  # reported too, but it inherits each foot's *most recent* liftoff step, so a
+  # foot whose liftoff sample was missed keeps a stamp from an earlier cycle and
+  # an otherwise clean takeoff reads as a 1.7 s stagger (measured: max 172 steps
+  # against a 26 ms push-off). This measure has no such memory.
+  mixed_run = torch.zeros(num_envs, dtype=torch.long, device=device)
+  was_raw_airborne = torch.zeros(num_envs, dtype=torch.bool, device=device)
+  takeoff_staggers: list[int] = []
+
+  for _ in range(steps):
+    with torch.no_grad():
+      actions = policy(observation)
+    observation, _, _, _, _ = env.step(actions)
+    height = _height(env)
+    alignment = _alignment(env)
+    upright = _upright(env)
+    command = env.command_manager.get_command(skill_term_name)
+    assert command is not None
+    # Which block holds the commanded velocity depends on the skill: walking
+    # keeps it in `command`, the jump in a separate twist block (its command
+    # block is full with the phase clock and the takeoff flag). Comparing the
+    # phase block against velocity would produce a meaningless number.
+    commanded_velocity = command[:, :3]
+    is_walk = torch.zeros(num_envs, dtype=torch.bool, device=device)
+    is_jump = torch.zeros(num_envs, dtype=torch.bool, device=device)
+    if isinstance(skill_term, SkillCommandTerm):
+      is_walk = skill_term.skill_is("walk")
+      is_jump = skill_term.skill_is("jump")
+      commanded_velocity = torch.where(
+        is_jump[:, None], skill_term.twist, commanded_velocity
+      )
+    elif hasattr(skill_term, "twist"):  # the standalone jump task
+      commanded_velocity = skill_term.twist  # type: ignore[union-attr]
+      is_jump = torch.ones(num_envs, dtype=torch.bool, device=device)
+    if isinstance(skill_term, SkillCommandTerm):
+      velocity_error = torch.norm(
+        commanded_velocity[:, :2] - env.scene["robot"].data.root_link_lin_vel_b[:, :2],
+        dim=1,
+      )
+      # Only the skills with a velocity command are scored on tracking it.
+      velocity_error = torch.where(
+        is_walk | is_jump, velocity_error, torch.zeros_like(velocity_error)
+      )
+    else:
+      velocity_error = torch.norm(
+        commanded_velocity[:, :2] - env.scene["robot"].data.root_link_lin_vel_b[:, :2],
+        dim=1,
+      )
+    contact = _contact_flags(env, "feet_ground_contact")
+    feet_down = (contact > 0.5).sum(dim=1).float()
+    airborne = feet_down < 0.5
+
+    # All four feet in one contact state, inside the jump's flight window.
+    together = (contact == contact[:, :1]).all(dim=1)
+    if isinstance(skill_term, (SkillCommandTerm, JumpCommand)):
+      phase = skill_term.phase
+      low, high = jump_flight_window
+      in_window = (phase >= low) & (phase < high) & is_jump
+      window_steps += int(in_window.sum())
+      split_contact_steps += int((in_window & ~together).sum())
+      # Snapshot before the update: on the takeoff step all four feet are off,
+      # so `together` is true and the counter is about to be reset.
+      previous_mixed = mixed_run.clone()
+      new_airborne = airborne & ~was_raw_airborne
+      if bool(new_airborne.any()):
+        takeoff_staggers.extend(previous_mixed[new_airborne & is_jump].tolist())
+      was_raw_airborne = airborne
+    mixed_run = torch.where(together, torch.zeros_like(mixed_run), mixed_run + 1)
+
+    step_counter += 1
+    air_run = torch.where(airborne, air_run + 1, air_run)
+    air_peak = torch.where(airborne, torch.maximum(air_peak, height), air_peak)
+    ended = ~airborne & (air_run > 0)
+    foot_contact = contact > 0.5
+    lifted = foot_was_contact & ~foot_contact
+    foot_liftoff = torch.where(
+      lifted, torch.full_like(foot_liftoff, step_counter), foot_liftoff
+    )
+    foot_was_contact = foot_contact
+    all_up = (foot_liftoff >= 0).all(dim=1) & airborne
+    # Edge-triggered: one sample per takeoff, on the first step all four are up.
+    fresh_takeoff = all_up & ~takeoff_pending
+    takeoff_pending |= all_up
+    spread = (foot_liftoff.max(dim=1).values - foot_liftoff.min(dim=1).values).float()
+    landed_now = foot_contact.any(dim=1)
+    takeoff_pending = torch.where(
+      landed_now, torch.zeros_like(takeoff_pending), takeoff_pending
+    )
+    # Per-foot clearing, matching `JumpState._update_takeoff`. Clearing all four
+    # whenever any foot lands throws away the liftoff record of feet that are
+    # still in the air, so only a full four-foot push-off from a grounded stance
+    # registers -- which makes the recorded spread identically zero and hides
+    # exactly the staggered takeoffs the metric exists to catch.
+    foot_liftoff = torch.where(
+      foot_contact, torch.full_like(foot_liftoff, -1), foot_liftoff
+    )
+    robot = env.scene["robot"]
+    if start_xy is None:
+      start_xy = robot.data.root_link_pos_w[:, :2].clone()
+
+    masks: dict[str, torch.Tensor]
+    if isinstance(skill_term, SkillCommandTerm):
+      masks = {name: skill_term.skill_is(name) for name in names}
+    else:
+      single = task_id.rsplit("-", 1)[-1].lower()
+      key = "jump" if single == "jump" else "handstand"
+      masks = {name: torch.full_like(airborne, name == key) for name in names}
+
+    drift = torch.norm(robot.data.root_link_pos_w[:, :2] - start_xy, dim=1)
+    for name, mask in masks.items():
+      if not bool(mask.any()):
+        continue
+      env_steps[name] += int(mask.sum())
+      if name == "jump":
+        takeoff_spreads[name].extend(spread[mask & fresh_takeoff].tolist())
+      if bool((ended & mask).any()):
+        air_runs[name].extend(air_run[ended & mask].tolist())
+        air_peaks[name].extend((air_peak[ended & mask] - STANDING_HEIGHT).tolist())
+      bucket = per_skill[name]
+      bucket["height"].extend(height[mask].tolist())
+      bucket["alignment"].extend(alignment[mask].tolist())
+      bucket["feet_down"].extend(feet_down[mask].tolist())
+      bucket["drift"].extend(drift[mask].tolist())
+      bucket["airborne"].extend(airborne[mask].float().tolist())
+      bucket["upright"].extend(upright[mask].tolist())
+      bucket["velocity_error"].extend(velocity_error[mask].tolist())
+      bucket["foot_contact"].append(contact[mask].mean(dim=0))
+
+    air_run = torch.where(airborne, air_run, torch.zeros_like(air_run))
+    air_peak = torch.where(airborne, air_peak, torch.full_like(air_peak, -1.0))
+
+    if isinstance(skill_term, (SkillCommandTerm, JumpCommand)):
+      left_ground = skill_term.left_ground
+      new_takeoff = left_ground & ~was_airborne
+      jump_takeoffs += int(new_takeoff.sum())
+      # Edge-triggered: count each environment once for having come back to a
+      # settled stance after a takeoff, not every step it stays there.
+      recovered = (
+        left_ground
+        & (feet_down == 4.0)
+        & (height < STANDING_HEIGHT + 0.03)
+        & (height > STANDING_HEIGHT - 0.03)
+      )
+      jump_recoveries += int((recovered & ~was_recovered).sum())
+      was_recovered |= recovered
+      was_airborne = left_ground.clone()
+
+  report: dict[str, object] = {
+    "task_id": task_id,
+    "checkpoint": str(checkpoint),
+    "num_envs": num_envs,
+    "steps": steps,
+    "condition": _condition_label(corruption, train_config, seed),
+  }
+  skill_reports: dict[str, dict[str, object]] = {}
+  for name, bucket in per_skill.items():
+    if not bucket["height"]:
+      continue
+    height_t = torch.tensor(bucket["height"])
+    alignment_t = torch.tensor(bucket["alignment"])
+    feet_t = torch.tensor(bucket["feet_down"])
+    airborne_t = torch.tensor(bucket["airborne"])
+    drift_t = torch.tensor(bucket["drift"])
+    entry: dict[str, object] = {
+      "samples": float(height_t.numel()),
+      "height_mean": float(height_t.mean()),
+      "height_max": float(height_t.max()),
+      "alignment_mean": float(alignment_t.mean()),
+      "fraction_near_vertical": float(
+        (alignment_t > HANDSTAND_ALIGNMENT_THRESHOLD).float().mean()
+      ),
+      "fraction_all_feet_down": float((feet_t == 4.0).float().mean()),
+      "fraction_airborne": float(airborne_t.mean()),
+      "drift_mean": float(drift_t.mean()),
+      "drift_max": float(drift_t.max()),
+      "upright_mean": float(torch.tensor(bucket["upright"]).mean()),
+      "fraction_standing": float(
+        (
+          (torch.tensor(bucket["height"]) > 0.13)
+          & (torch.tensor(bucket["upright"]) > 0.9)
+        )
+        .float()
+        .mean()
+      ),
+      "velocity_error_mean": float(torch.tensor(bucket["velocity_error"]).mean()),
+    }
+    if air_runs.get(name) and env_steps.get(name, 0) > 0:
+      lengths = torch.tensor(air_runs[name], dtype=torch.float32)
+      seconds = env_steps[name] * float(env.step_dt)
+      entry["flight_count_per_env_second"] = float(lengths.numel() / seconds)
+      entry["flight_mean_s"] = float(lengths.mean() * env.step_dt)
+      entry["flight_median_s"] = float(lengths.median() * env.step_dt)
+      entry["flight_max_s"] = float(lengths.max() * env.step_dt)
+      # One flight per 2.5 s jump cycle works out to 0.4 per env-second.
+      entry["flights_per_jump_cycle"] = float(lengths.numel() / seconds * 2.5)
+    if takeoff_spreads.get(name):
+      spreads = torch.tensor(takeoff_spreads[name])
+      entry["takeoff_spread_mean"] = float(spreads.mean())
+      entry["takeoff_spread_max"] = float(spreads.max())
+      entry["takeoff_count"] = int(spreads.numel())
+    if bucket["foot_contact"]:
+      # Sensor frame order follows the robot profile: FR, FL, RR, RL, so the
+      # first two entries are the front feet and the last two the rear pair.
+      mean_contact = torch.stack(bucket["foot_contact"]).mean(dim=0)
+      entry["foot_contact_fraction"] = {
+        name: float(value)
+        for name, value in zip(("FR", "FL", "RR", "RL"), mean_contact, strict=True)
+      }
+    if name == "handstand":
+      entry["passes_handstand"] = float(
+        (
+          (alignment_t > HANDSTAND_ALIGNMENT_THRESHOLD)
+          & (torch.tensor(bucket["height"]) > 0.19)
+        )
+        .float()
+        .mean()
+      )
+    if name == "jump":
+      entry["peak_rise"] = float(height_t.max() - STANDING_HEIGHT)
+      entry["passes_jump_height"] = float(
+        (height_t.max() - STANDING_HEIGHT) >= JUMP_RISE_TARGET
+      )
+      if air_peaks.get(name):
+        peaks = torch.tensor(air_peaks[name], dtype=torch.float32)
+        entry["flight_apex_rise_mean"] = float(peaks.mean())
+        entry["flight_apex_rise_median"] = float(peaks.median())
+        entry["flight_apex_rise_max"] = float(peaks.max())
+        # Fraction of *individual* flights that clear the target height. This is
+        # the honest form of `passes_jump_height`: a bouncing policy passes the
+        # global test with a single lucky flight and fails this one.
+        entry["passes_jump_height_per_flight"] = float(
+          (peaks >= JUMP_RISE_TARGET).float().mean()
+        )
+        # Bouncing inflates the raw flight count with 1-2 cm shuffles that a
+        # walking gait also produces. Counting only flights that clear the target
+        # height is the metric that should read exactly 1.0 per cycle; the raw
+        # count stays in the report for context.
+        seconds = env_steps[name] * float(env.step_dt)
+        substantial = int((peaks >= JUMP_RISE_TARGET).sum())
+        entry["substantial_flights_per_jump_cycle"] = float(substantial / seconds * 2.5)
+    skill_reports[name] = entry
+  report["skills"] = skill_reports
+  report["jump_contact_pattern"] = {
+    "window_steps": window_steps,
+    "split_contact_steps": split_contact_steps,
+    "four_feet_together_fraction": (
+      1.0 - split_contact_steps / window_steps if window_steps else None
+    ),
+    "definition": (
+      "fraction of flight-window steps at which all four feet share one contact "
+      "state; the Go2 moving-jump `jump_contact_match` criterion. A staggered "
+      "push-off has mixed contact states, a simultaneous one does not."
+    ),
+    "flight_window": list(jump_flight_window),
+  }
+  if takeoff_staggers:
+    stagger = torch.tensor(takeoff_staggers, dtype=torch.float32)
+    report["jump_takeoff_stagger"] = {
+      "takeoffs": int(stagger.numel()),
+      "steps_mean": float(stagger.mean()),
+      "steps_median": float(stagger.median()),
+      "steps_max": float(stagger.max()),
+      "share_within_2_steps": float((stagger <= 2).float().mean()),
+      "definition": (
+        "steps of mixed contact states immediately before all four feet are off "
+        "the ground, read from the contact pattern (no per-foot liftoff "
+        "records). One control step is 10 ms and the push-off lasts ~2.6 steps."
+      ),
+    }
+  report["jump_takeoffs"] = jump_takeoffs
+  report["jump_recoveries"] = jump_recoveries
+  report["jump_recovery_ratio"] = (
+    jump_recoveries / jump_takeoffs if jump_takeoffs else 0.0
+  )
+  env.close()
+  return report
+
+
+def _condition_label(corruption: bool, train_config: bool, seed: int | None) -> str:
+  """Human-readable measurement condition, recorded with every report."""
+  if train_config:
+    base = "train-config (noise + pushes + resets)"
+  elif corruption:
+    base = "play-config + observation noise"
+  else:
+    base = "play-config (clean observations)"
+  return base if seed is None else f"{base}, seed={seed}"
+
+
+def _parse_pairs(spec: str, skills: list[str]) -> list[tuple[str, str]]:
+  """Parse ``"jump>handstand,walk>handstand"`` into ordered pairs."""
+  pairs: list[tuple[str, str]] = []
+  for chunk in spec.split(","):
+    chunk = chunk.strip()
+    if not chunk:
+      continue
+    parts = chunk.replace("->", ">").split(">")
+    if len(parts) != 2:
+      raise SystemExit(f"--pairs expects 'from>to', got {chunk!r}")
+    source, target = (part.strip() for part in parts)
+    for name in (source, target):
+      if name not in skills:
+        raise SystemExit(f"unknown skill {name!r}; have {skills}")
+    pairs.append((source, target))
+  return pairs
+
+
+def transitions(
+  task_id: str,
+  checkpoint: Path,
+  *,
+  num_envs: int,
+  hold_steps: int,
+  settle_steps: int,
+  measure_steps: int,
+  device: str,
+  pairs: list[tuple[str, str]] | None = None,
+  corruption: bool = False,
+  train_config: bool = False,
+  seed: int | None = None,
+) -> dict[str, object]:
+  """Script every ordered skill transition and score the destination skill.
+
+  Holding one skill and then commanding another is the property that a
+  single-policy multi-skill controller is actually bought for, and it is the
+  one thing behaviour cloning cannot provide (the demonstration data contains no
+  switches). Each pair is scored on the destination skill's own success metric
+  measured over the last ``measure_steps`` steps.
+  """
+  env, policy = build_policy_env(
+    task_id,
+    checkpoint,
+    num_envs=num_envs,
+    device=device,
+    corruption=corruption,
+    train_config=train_config,
+    seed=seed,
+  )
+
+  term = env.command_manager.get_term("skill")
+  assert isinstance(term, SkillCommandTerm), "transitions need the unified task"
+  skills = list(SKILL_NAMES)
+  ids = torch.arange(num_envs, device=device)
+  selected = pairs or [(a, b) for a in skills for b in skills]
+  # Only reset subsets of the batch when a filtered pair list is used, so a
+  # targeted check costs a fraction of the full matrix.
+  sources = sorted({source for source, _ in selected})
+  matrix: dict[str, dict[str, float]] = {source: {} for source in sources}
+
+  for source in sources:
+    targets = [target for a, target in selected if a == source]
+    for target in targets:
+      observation, _ = env.reset()
+      term.force_skill(source, ids)
+      for _ in range(hold_steps):
+        with torch.no_grad():
+          observation, _, _, _, _ = env.step(policy(observation))
+      term.force_skill(target, ids)
+      for _ in range(settle_steps):
+        with torch.no_grad():
+          observation, _, _, _, _ = env.step(policy(observation))
+      heights, upright, align, feet_down = [], [], [], []
+      for _ in range(measure_steps):
+        with torch.no_grad():
+          observation, _, _, _, _ = env.step(policy(observation))
+        robot = env.scene["robot"]
+        heights.append(
+          (robot.data.root_link_pos_w[:, 2] - env.scene.env_origins[:, 2]).cpu()
+        )
+        gravity = robot.data.projected_gravity_b
+        upright.append((-gravity[:, 2]).cpu())
+        align.append((gravity @ torch.tensor([1.0, 0.0, 0.0], device=device)).cpu())
+        contact = _contact_flags(env, "feet_ground_contact")
+        feet_down.append((contact > 0.5).sum(dim=1).cpu())
+      height_t = torch.cat(heights)
+      upright_t = torch.cat(upright)
+      align_t = torch.cat(align)
+      feet_t = torch.cat(feet_down)
+      matrix[source][target] = _skill_success(
+        target, height_t, upright_t, align_t, feet_t
+      )
+
+  env.close()
+  return {
+    "task_id": task_id,
+    "checkpoint": str(checkpoint),
+    "num_envs": num_envs,
+    "condition": _condition_label(corruption, train_config, seed),
+    "hold_steps": hold_steps,
+    "settle_steps": settle_steps,
+    "measure_steps": measure_steps,
+    "success": matrix,
+    "mean_off_diagonal": _off_diagonal_mean(matrix),
+  }
+
+
+def _skill_success(
+  skill: str,
+  height: torch.Tensor,
+  upright: torch.Tensor,
+  align: torch.Tensor,
+  feet_down: torch.Tensor,
+) -> float:
+  """Fraction of measured steps that count as performing ``skill``."""
+  if skill == "walk":
+    return float(((upright > 0.9) & (height > 0.13) & (feet_down < 4)).float().mean())
+  if skill == "handstand":
+    return float(
+      ((align > HANDSTAND_ALIGNMENT_THRESHOLD) & (height > 0.19)).float().mean()
+    )
+  if skill == "getup":
+    return float(((upright > 0.9) & (height > 0.13)).float().mean())
+  if skill == "jump":
+    peak = float(height.max() - STANDING_HEIGHT)
+    return float(peak >= JUMP_RISE_TARGET)
+  raise ValueError(skill)
+
+
+def _off_diagonal_mean(matrix: dict[str, dict[str, float]]) -> float:
+  values = [
+    value
+    for source, row in matrix.items()
+    for target, value in row.items()
+    if source != target
+  ]
+  return sum(values) / len(values) if values else 0.0
+
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument("task_id", help="registered task id")
+  parser.add_argument("--checkpoint", type=Path, required=True)
+  parser.add_argument("--num-envs", type=int, default=32)
+  parser.add_argument("--steps", type=int, default=1500)
+  parser.add_argument("--device", default="cuda:0")
+  parser.add_argument(
+    "--transitions",
+    action="store_true",
+    help="score every ordered skill transition instead of per-skill rollouts",
+  )
+  parser.add_argument(
+    "--corruption",
+    action="store_true",
+    help="play config with the actor's observation noise switched back on",
+  )
+  parser.add_argument(
+    "--train-config",
+    action="store_true",
+    help="use the training config: noise, interval pushes and episode resets",
+  )
+  parser.add_argument(
+    "--seed", type=int, default=None, help="pin the environment randomization"
+  )
+  parser.add_argument(
+    "--pairs",
+    default="",
+    help="comma separated 'from>to' subset for --transitions, e.g. jump>handstand",
+  )
+  parser.add_argument("--hold-steps", type=int, default=250)
+  parser.add_argument("--settle-steps", type=int, default=250)
+  parser.add_argument("--measure-steps", type=int, default=200)
+  args = parser.parse_args()
+  if args.transitions:
+    report = transitions(
+      args.task_id,
+      args.checkpoint,
+      num_envs=args.num_envs,
+      hold_steps=args.hold_steps,
+      settle_steps=args.settle_steps,
+      measure_steps=args.measure_steps,
+      device=args.device,
+      pairs=(_parse_pairs(args.pairs, list(SKILL_NAMES)) if args.pairs else None),
+      corruption=args.corruption,
+      train_config=args.train_config,
+      seed=args.seed,
+    )
+  else:
+    report = evaluate(
+      args.task_id,
+      args.checkpoint,
+      num_envs=args.num_envs,
+      steps=args.steps,
+      device=args.device,
+      corruption=args.corruption,
+      train_config=args.train_config,
+      seed=args.seed,
+    )
+  print(json.dumps(report, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+  main()

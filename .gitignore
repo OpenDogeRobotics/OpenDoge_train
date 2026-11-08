@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Training outputs
+logs/
+wandb/
+videos/
+*.pt
+*.pth
+
+# Exported policies are generated artifacts
+*.onnx
+*.onnx.data
+
+# The browser playground intentionally ships its reviewed demo policies.
+!playground/public/policies/
+!playground/public/policies/*.onnx
+
+# Native builds
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Makefile.user
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*~
+
+# Independent workbench runtime and frontend dependencies
+.src-workbench/
+node_modules/
+
+# Versioned baseline policies ship inside the package so wheels include them.
+!src/baseline/
+!src/baseline/**
