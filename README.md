@@ -74,8 +74,7 @@ OpenDoge_train/
 │   ├── cli.py           # train / play / list-envs 入口
 │   └── viewer.py        # Viser 回放扩展
 ├── tests/               # 兼容性测试
-├── docs/                # 设计、验收与工作台文档
-└── playground/          # 浏览器策略试玩前端
+└── docs/                # 设计、验收与工作台文档
 ```
 
 分层原则：
@@ -166,17 +165,9 @@ uv run --extra workbench src-workbench
 
 前端开发、模块边界和验证说明见 [工作台文档](docs/workbench.md)。
 
-### 独立试玩区
+### 在线仿真器
 
-`playground/` 是与工作台和训练流程隔离的静态浏览器应用：MuJoCo WASM 在浏览器内运行物理，ONNX Runtime Web 执行已挑选策略。它仅用于交互展示，不作为训练验收工具，也不会连接工作台端口或读取训练日志。
-
-```bash
-cd playground
-npm install
-npm run dev
-```
-
-当前包含 Go2 的前倒立、后立、trot、jump、spring jump，以及 ArenaX / DreamWaQ / AMP-CTS 步态等试玩策略。构建生产静态站点使用 `npm run build`；详细的资产准备方式见 [`playground/README.md`](playground/README.md)。
+浏览器版 MuJoCo + ONNX 策略演示已迁出本仓库，独立部署在 <https://opendogerobotics.github.io/>（源码：[OpenDogeRobotics.github.io](https://github.com/OpenDogeRobotics/OpenDogeRobotics.github.io)）。训练、评估和工作台都不依赖任何前端资源。
 
 ### 动作数据
 
@@ -219,7 +210,7 @@ make check
 
 The repository carries two parallel branches with different stacks and non-interchangeable commands:
 
-- **`mjlab`** (default; described by this README): the current mainline, built on **mjlab 1.6.0** (MuJoCo-Warp), with OpenDoge velocity/get-up/handstand/jump/multi-skill tasks, Viser playback, a standalone workbench, and a browser playground.
+- **`mjlab`** (default; described by this README): the current mainline, built on **mjlab 1.6.0** (MuJoCo-Warp), with OpenDoge velocity/get-up/handstand/jump/multi-skill tasks, Viser playback, a standalone workbench, and a separate online browser simulator.
 - **`isaacgym`**: the original Isaac Gym stack (Preview 4 + `legged_gym` + HIMLoco-derived PPO/AMP), including MuJoCo Sim2Sim validation and ONNX export. Kept for reproducing earlier results and for comparison.
 
 ```bash
@@ -286,8 +277,7 @@ OpenDoge_train/
 │   ├── cli.py           # train / play / list-envs entry points
 │   └── viewer.py        # Viser playback extensions
 ├── tests/               # Compatibility tests
-├── docs/                # Design, acceptance, and workbench docs
-└── playground/          # Browser policy playground
+└── docs/                # Design, acceptance, and workbench docs
 ```
 
 Layering principles:
@@ -379,17 +369,9 @@ Motions live in `src/assets/motions/`. The page imports and selects files, names
 
 Front-end development, module boundaries, and validation notes are in the [workbench documentation](docs/workbench.md).
 
-### Standalone playground
+### Online simulator
 
-`playground/` is a static browser application isolated from the workbench and the training flow: MuJoCo WASM runs physics in the browser and ONNX Runtime Web executes selected policies. It is for interactive demonstration only—not a training acceptance tool—and never connects to the workbench port or reads training logs.
-
-```bash
-cd playground
-npm install
-npm run dev
-```
-
-It currently includes Go2 front/rear handstand, trot, jump, spring jump, and ArenaX / DreamWaQ / AMP-CTS gait demos. Build a production static site with `npm run build`; asset preparation is documented in [`playground/README.md`](playground/README.md).
+The browser MuJoCo + ONNX demo now lives outside this repository at <https://opendogerobotics.github.io/> (source: [OpenDogeRobotics.github.io](https://github.com/OpenDogeRobotics/OpenDogeRobotics.github.io)). Training, evaluation, and the workbench have no front-end dependency.
 
 ### Motion data
 

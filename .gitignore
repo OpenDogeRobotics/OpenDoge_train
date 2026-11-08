@@ -20,10 +20,6 @@ videos/
 *.onnx
 *.onnx.data
 
-# The browser playground intentionally ships its reviewed demo policies.
-!playground/public/policies/
-!playground/public/policies/*.onnx
-
 # Native builds
 cmake-build-*/
 CMakeFiles/
