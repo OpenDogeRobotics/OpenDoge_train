@@ -128,7 +128,7 @@ class Go2TransitionAdapter:
         foot = self.raw_env.sim.mj_model.geom("robot/FL_foot_collision").id
         friction = self.raw_env.sim.model.geom_friction
         context[:, CONTEXT_FRICTION] = (friction[ids, foot, 0] if friction.ndim == 3 else friction[foot, 0])
-        base = self.raw_env.sim.mj_model.body("robot/base").id
+        base = self.raw_env.sim.mj_model.body(f"robot/{self.cfg.asset.base_body}").id
         ipos = self.raw_env.sim.model.body_ipos
         nominal = torch.as_tensor(self.raw_env.sim.mj_model.body_ipos[base].copy(), device=self.device)
         context[:, CONTEXT_COM] = (ipos[ids, base] if ipos.ndim == 3 else ipos[base]) - nominal

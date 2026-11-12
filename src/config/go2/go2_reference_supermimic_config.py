@@ -13,6 +13,14 @@ class Go2ReferenceCfg(BaseConfig):
 
     algorithm = "moe_history"
 
+    class asset:
+        """机器人资产身份；跨机器人复用任务机制时覆写。"""
+
+        robot = "go2_reference"
+        """环境工厂与FK分发键；go2_reference或opendoge_reference。"""
+        base_body = "base"
+        """基座刚体名；事件随机化与跟随视角使用。"""
+
     @dataclass
     class algo(SuperMimicConfig):
         """本机器人的实际训练配方；驱动策略参数在runner.driver中维护。"""
@@ -215,6 +223,13 @@ class Go2ReferenceCfg(BaseConfig):
         field_cache_dir = "logs/heightfields"
         scan_size_m = (1.2, 0.72)
         scan_resolution_m = 0.12
+        # 参考ri_5036_him难度；小尺度机器人按URDF腿长比例覆写。
+        stair_dimensions = ((0.18, 1.9), (0.20, 1.75), (0.22, 1.65), (0.25, 1.5))
+        """各阶梯子地形的(步宽, 边界宽)，单位米。"""
+        stair_height_range = (0.05, 0.18)
+        """阶梯步高范围，单位米。"""
+        box_grid_height_range = (0.02, 0.10)
+        """box_random_grid子地形的高度范围，单位米。"""
 
     class domain_randomization:
         """按指定Go2参考的MjLab基类随机化，不加入外力push。"""

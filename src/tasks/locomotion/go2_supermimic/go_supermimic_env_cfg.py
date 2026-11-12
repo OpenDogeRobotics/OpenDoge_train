@@ -20,6 +20,16 @@ from mjlab.viewer import ViewerConfig
 from src.assets.robots.go2.go2_reference import get_reference_go2_robot_cfg
 from src.config.go2.go2_reference_supermimic_config import Go2ReferenceCfg
 
+
+def _reference_robot_cfg(cfg):
+    """按cfg.asset分发参考机器人资产工厂。"""
+    if cfg.asset.robot == "go2_reference":
+        return get_reference_go2_robot_cfg(cfg)
+    if cfg.asset.robot == "opendoge_reference":
+        from src.assets.robots.opendoge.opendoge_reference import get_reference_opendoge_robot_cfg
+        return get_reference_opendoge_robot_cfg(cfg)
+    raise ValueError(f"Unknown SuperMimic robot asset: {cfg.asset.robot}")
+
 from .mdp.state_spec import FOOT_NAMES
 from .mdp.terrains import TerrainMap
 
@@ -136,7 +146,7 @@ def make_go2_supermimic_env_cfg(
             fields=("found", "force"), reduce="none", num_slots=1, history_length=1,
         ),)
     scene = SceneCfg(
-        entities={"robot": get_reference_go2_robot_cfg(cfg)},
+        entities={"robot": _reference_robot_cfg(cfg)},
         terrain=terrain_map.entity_cfg(),
         sensors=sensors,
         num_envs=cfg.env.num_envs,
@@ -190,7 +200,7 @@ def make_go2_supermimic_env_cfg(
                 "asset_cfg": SceneEntityCfg("robot"), "bias_range": tuple(domain.encoder_bias_range),
             }),
             "base_com": EventTermCfg(func=envs_mdp.dr.body_com_offset, mode="startup", params={
-                "asset_cfg": SceneEntityCfg("robot", body_names=("base",)), "operation": "add",
+                "asset_cfg": SceneEntityCfg("robot", body_names=(cfg.asset.base_body,)), "operation": "add",
                 "ranges": {axis: tuple(domain.com_range[name]) for axis, name in enumerate(("x", "y", "z"))},
             }),
         })
@@ -225,7 +235,7 @@ def make_go2_supermimic_env_cfg(
     viewer = ViewerConfig(
         origin_type=ViewerConfig.OriginType.ASSET_BODY,
         entity_name="robot",
-        body_name="base",
+        body_name=cfg.asset.base_body,
         distance=cfg.viewer.distance,
         elevation=cfg.viewer.elevation,
         azimuth=cfg.viewer.azimuth,

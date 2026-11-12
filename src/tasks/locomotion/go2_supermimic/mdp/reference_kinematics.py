@@ -12,18 +12,27 @@ import numpy as np
 import torch
 from torch import nn
 
-from src.assets.robots.go2.go2_reference import GO2_XML
-
 from .reference_rotations import axis_angle_to_mat, mm3, mv3, quat_to_mat
 from .state_spec import FOOT_NAMES, JOINT_NAMES
 
 
-class Go2Kinematics(nn.Module):
-    """当前参考 Go2 的可微正运动学；几何常量从资产读取并注册为 buffer。"""
+def make_kinematics(cfg, device="cpu"):
+    """按cfg.asset分发机器人的可微正运动学。"""
+    if cfg.asset.robot == "go2_reference":
+        from src.assets.robots.go2.go2_reference import GO2_XML
+        return RobotKinematics(GO2_XML, cfg.asset.base_body, device=device)
+    if cfg.asset.robot == "opendoge_reference":
+        from src.assets.robots.opendoge.opendoge_reference import OPENDOGE_XML
+        return RobotKinematics(OPENDOGE_XML, cfg.asset.base_body, device=device)
+    raise ValueError(f"Unknown SuperMimic robot asset: {cfg.asset.robot}")
 
-    def __init__(self, device="cpu"):
+
+class RobotKinematics(nn.Module):
+    """给定MJCF的可微正运动学；几何常量从资产读取并注册为 buffer。"""
+
+    def __init__(self, xml_path, base_body, device="cpu"):
         super().__init__()
-        model = mujoco.MjModel.from_xml_path(str(GO2_XML))
+        model = mujoco.MjModel.from_xml_path(str(xml_path))
         joint_indices = {name: index for index, name in enumerate(JOINT_NAMES)}
         bodies, parents, joints, axes, offsets, rotations = [], [], [], [], [], []
         mj_to_local = {}
@@ -33,8 +42,8 @@ class Go2Kinematics(nn.Module):
                 raise ValueError(f"Go2 FK requires exactly one joint per body: {name}")
             joint = int(model.body_jntadr[body])
             if model.jnt_type[joint] == mujoco.mjtJoint.mjJNT_FREE:
-                if name != "base" or model.body_parentid[body] != 0 or bodies:
-                    raise ValueError("Go2 FK requires a single free base before the leg joints")
+                if name != base_body or model.body_parentid[body] != 0 or bodies:
+                    raise ValueError("FK requires a single free base before the leg joints")
                 parents.append(-1)
                 joints.append(-1)
             else:
@@ -91,3 +100,10 @@ class Go2Kinematics(nn.Module):
             foot_velocities.append(velocities[parent] + torch.cross(angular[parent], displacement, dim=-1))
         limbs = [positions[index] for index in self.limb_indices] + feet
         return torch.stack(limbs, -2), torch.stack(foot_velocities, -2)
+
+
+def Go2Kinematics(device="cpu"):
+    """兼容旧调用：默认参考 Go2 的可微正运动学。"""
+    from src.assets.robots.go2.go2_reference import GO2_XML
+
+    return RobotKinematics(GO2_XML, "base", device=device)

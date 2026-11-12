@@ -32,6 +32,7 @@ from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 
 SUPERMIMIC_PREFIX = "Unitree-Go2-SuperMimic-"
+OPENDOGE_SUPERMIMIC_PREFIX = "Opendoge-SuperMimic-"
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,14 @@ def run_viewer(env, policy, cfg: PlayConfig, device: str) -> None:
 
 def supermimic_task(task_id: str | None) -> bool:
     """SuperMimic 播放使用自己的检查点与历史适配，不进入PPO注册表。"""
-    if task_id is None or not task_id.startswith(SUPERMIMIC_PREFIX):
+    if task_id is None:
+        return False
+    if task_id.startswith(OPENDOGE_SUPERMIMIC_PREFIX):
+        from src.tasks.locomotion.opendoge_supermimic.config.train_cfg import TASK_MODES
+        if task_id not in TASK_MODES:
+            raise ValueError(f"Unknown OpenDoge SuperMimic task: {task_id}")
+        return True
+    if not task_id.startswith(SUPERMIMIC_PREFIX):
         return False
     from src.tasks.locomotion.go2_supermimic.config.train_cfg import TASK_MODES
 
@@ -108,7 +116,10 @@ def _resolve_checkpoint(cfg: PlayConfig) -> Path | None:
 
 def _run_supermimic(task_id: str, cfg: PlayConfig, checkpoint: Path | None, device: str) -> None:
     """只装配任务侧播放接口、可选录像和查看器。"""
-    from src.tasks.locomotion.go2_supermimic.rl.playback import make_playback_env
+    if task_id.startswith(OPENDOGE_SUPERMIMIC_PREFIX):
+        from src.tasks.locomotion.opendoge_supermimic.rl.playback import make_playback_env
+    else:
+        from src.tasks.locomotion.go2_supermimic.rl.playback import make_playback_env
 
     env, policy = make_playback_env(
         task_id, checkpoint_file=checkpoint, agent=cfg.agent, num_envs=cfg.num_envs, device=device,

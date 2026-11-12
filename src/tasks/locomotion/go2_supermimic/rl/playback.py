@@ -16,6 +16,7 @@ from mjlab.utils.wrappers import VideoRecorder
 from agents.supermimic.interfaces import append_history
 from src.config.go2.go2_reference_supermimic_config import Go2ReferenceCfg
 
+from ..config.loading import configuration_for_settings
 from ..config.train_cfg import TASK_MODES
 from .checkpoints import build_playback_policy, load_playback_source
 from .transition_adapter import Go2TransitionAdapter
@@ -203,15 +204,21 @@ def _restore_curriculum(adapter, checkpoint):
 
 
 def make_playback(task_id, *, checkpoint_file=None, agent="trained", num_envs=None, device="cpu",
-                  render_mode=None, video_height=None, video_width=None, no_terminations=False):
-    """返回已重置的播放环境与确定性盲策略策略，不创建训练组件。"""
-    if task_id not in TASK_MODES:
-        raise ValueError(f"Unknown Go2 SuperMimic task: {task_id}")
+                  render_mode=None, video_height=None, video_width=None, no_terminations=False,
+                  task_modes=TASK_MODES, configuration_factory=configuration_for_settings):
+    """返回已重置的播放环境与确定性盲策略策略，不创建训练组件。
+
+    跨机器人任务通过task_modes/configuration_factory注入身份；默认保持Go2行为。
+    """
+    if task_id not in task_modes:
+        raise ValueError(f"Unknown SuperMimic task: {task_id}")
     if agent not in ("trained", "zero", "random"):
         raise ValueError(f"Unsupported agent mode: {agent}")
-    source = load_playback_source(task_id, checkpoint_file) if agent == "trained" else None
-    cfg = deepcopy(source.cfg) if source is not None else Go2ReferenceCfg()
-    cfg.terrain.mode = TASK_MODES[task_id]
+    source = (load_playback_source(task_id, checkpoint_file, task_modes=task_modes,
+                                   configuration_factory=configuration_factory)
+              if agent == "trained" else None)
+    cfg = deepcopy(source.cfg) if source is not None else configuration_factory({})
+    cfg.terrain.mode = task_modes[task_id]
     cfg.env.num_envs = num_envs if num_envs is not None else 1
     torch.manual_seed(cfg.env.seed)
     adapter = _PlaybackTransitionAdapter(
@@ -242,7 +249,8 @@ def make_playback(task_id, *, checkpoint_file=None, agent="trained", num_envs=No
 
 def make_playback_env(task_id, *, checkpoint_file=None, agent="trained", num_envs=None, device="cpu",
                       video=False, video_length=200, video_height=None, video_width=None,
-                      no_terminations=False):
+                      no_terminations=False, task_modes=TASK_MODES,
+                      configuration_factory=configuration_for_settings):
     """在播放环境外按需装配录像；录像器不可用时关闭已建环境并继续抛出。"""
     checkpoint = Path(checkpoint_file).expanduser().resolve() if checkpoint_file is not None else None
     record_video = checkpoint is not None and video
@@ -252,6 +260,7 @@ def make_playback_env(task_id, *, checkpoint_file=None, agent="trained", num_env
         task_id, checkpoint_file=checkpoint, agent=agent, num_envs=num_envs, device=device,
         render_mode="rgb_array" if record_video else None, video_height=video_height,
         video_width=video_width, no_terminations=no_terminations,
+        task_modes=task_modes, configuration_factory=configuration_factory,
     )
     if not record_video:
         return env, policy

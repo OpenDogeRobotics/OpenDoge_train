@@ -15,7 +15,7 @@ from agents.supermimic.interfaces import AlgorithmSpec, TaskState
 from .reference_rewards import reference_reward_terms
 from .commands import advance_commands, heading_command, sample_commands
 from .gait_rewards import gait_phase
-from .reference_kinematics import Go2Kinematics
+from .reference_kinematics import make_kinematics
 from .reference_rotations import mat_to_quat, mv3, quat_to_mat
 from .structured_dynamics import ResidualDynamics
 from .reference_state import (
@@ -53,7 +53,7 @@ class Go2ReferenceTaskModel:
         self.root_quat = slice(self.physical_dim, self.physical_dim + 4)
         self.model_input_dim = self.physical_dim + 114
         self.dynamics = ResidualDynamics(self.dt, cfg.control.decimation)
-        self.kinematics = Go2Kinematics(device=self.device)
+        self.kinematics = make_kinematics(cfg, device=self.device)
         self.observation_term_dims = type(self).observation_term_dims + ((2,) if cfg.experiment.actor_phase else ())
         self.default_joint_pos = torch.as_tensor(default_joint_pos, device=self.device, dtype=torch.float32).clone()
         self.joint_limits = torch.as_tensor(joint_limits, device=self.device, dtype=torch.float32).clone()
@@ -73,9 +73,20 @@ class Go2ReferenceTaskModel:
                 raise ValueError(f"Reference reward parameter must be positive and finite: {name}")
         if cfg.reward.fall_angle >= math.pi:
             raise ValueError("Reference fall angle must be less than pi radians")
-        # 指定参考提交target/terrain.py的前移11×7网格，顺序为x主序、y次序。
-        xs = -.42 + .12 * torch.arange(11, device=self.device)
-        ys = -.36 + .12 * torch.arange(7, device=self.device)
+        # 指定参考提交target/terrain.py的前移11×7网格，顺序为x主序、y次序；
+        # 网格范围按机器人尺度由scan_size_m缩放，点数保持77维critic布局。
+        scan_size = cfg.terrain.scan_size_m
+        scan_resolution = cfg.terrain.scan_resolution_m
+        if len(scan_size) != 2 or not all(math.isfinite(v) and v > 0 for v in scan_size):
+            raise ValueError("Terrain scan size must be positive finite pairs")
+        if not math.isfinite(scan_resolution) or scan_resolution <= 0:
+            raise ValueError("Terrain scan resolution must be positive and finite")
+        # 参考网格的x跨度为10倍分辨率、y跨度为6倍分辨率；两者冗余声明时必须一致。
+        if not all(math.isclose(span, scan_resolution * steps, rel_tol=1e-6)
+                   for span, steps in ((scan_size[0], 10), (scan_size[1], 6))):
+            raise ValueError("Terrain scan size must equal resolution times the fixed grid steps")
+        xs = -0.35 * scan_size[0] + scan_size[0] / 10 * torch.arange(11, device=self.device)
+        ys = -0.5 * scan_size[1] + scan_size[1] / 6 * torch.arange(7, device=self.device)
         self.scan_points = torch.stack(torch.meshgrid(xs, ys, indexing="ij"), -1).reshape(-1, 2)
         noise = cfg.noise.noise_scales
         self.noise_amplitude = self.default_joint_pos.new_tensor(
@@ -93,7 +104,7 @@ class Go2ReferenceTaskModel:
         version = "v7" if self.him_rewards else "v6" if self.leg_collision else "v5" if self.force_rewards else "v4"
         self.spec = AlgorithmSpec(self.physical_dim + 4, self.physical_dim - 45, 12, sum(self.observation_term_dims),
                                   cfg.env.num_critic_obs, 26, MEMORY_DIM, 3,
-                                  f"go2_reference_velocity_{version}_residual_fk_v1:" + self.semantic_hash,
+                                  f"{cfg.asset.robot}_velocity_{version}_residual_fk_v1:" + self.semantic_hash,
                                   model_id="supermimic_moe_velocity_v1")
 
     def _semantic_config(self) -> dict:

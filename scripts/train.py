@@ -39,6 +39,7 @@ from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 
 SUPERMIMIC_PREFIX = "Unitree-Go2-SuperMimic-"
+OPENDOGE_SUPERMIMIC_PREFIX = "Opendoge-SuperMimic-"
 
 
 @dataclass(frozen=True)
@@ -213,7 +214,12 @@ def supermimic_task(task_id: str | None) -> bool:
 def main() -> None:
     """先解析任务 ID，再根据该任务配置解析命令行覆盖。"""
     # 提前读取任务ID，避免任何分支都导入PPO注册表。
-    if supermimic_task(sys.argv[1] if len(sys.argv) > 1 else None):
+    task_argument = sys.argv[1] if len(sys.argv) > 1 else None
+    if task_argument is not None and task_argument.startswith(OPENDOGE_SUPERMIMIC_PREFIX):
+        from src.tasks.locomotion.opendoge_supermimic.cli import train_main
+        train_main(task_argument, sys.argv[2:])
+        return
+    if supermimic_task(task_argument):
         from src.tasks.locomotion.go2_supermimic.cli import train_main
 
         train_main(sys.argv[1], sys.argv[2:])
@@ -226,10 +232,13 @@ def main() -> None:
     tasks = list_tasks()
     if len(sys.argv) == 1 or sys.argv[1] in {"-h", "--help"}:
         from src.tasks.locomotion.go2_supermimic.config.train_cfg import TASK_MODES
+        from src.tasks.locomotion.opendoge_supermimic.config.train_cfg import (
+            TASK_MODES as OPENDOGE_TASK_MODES,
+        )
 
         print(f"usage: {sys.argv[0]} <TASK> [OPTIONS]")
         print(f"Run '{sys.argv[0]} <TASK> --help' for task-specific options.")
-        print("Available tasks:\n  " + "\n  ".join(sorted([*tasks, *TASK_MODES])))
+        print("Available tasks:\n  " + "\n  ".join(sorted([*tasks, *TASK_MODES, *OPENDOGE_TASK_MODES])))
         return
     task_id, remaining_args = tyro.cli(
         tyro.extras.literal_type_from_choices(tasks),

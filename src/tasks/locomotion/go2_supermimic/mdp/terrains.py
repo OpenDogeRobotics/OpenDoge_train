@@ -33,16 +33,17 @@ def reference_generator(cfg) -> TerrainGeneratorCfg:
     for name in ("hf_pyramid_slope", "hf_pyramid_slope_inv", "wave_terrain", "random_rough"):
         terrain.sub_terrains.pop(name)
     terrain.sub_terrains["box_random_grid"] = BoxRandomGridTerrainCfg(
-        proportion=0.05, grid_width=0.8, grid_height_range=(0.02, 0.10),
+        proportion=0.05, grid_width=0.8, grid_height_range=tuple(cfg.box_grid_height_range),
         platform_width=2.4, border_width=0.25, holes=False,
         merge_similar_heights=False, height_merge_threshold=0.02, max_merge_distance=3,
     )
-    stair_dimensions = ((0.18, 1.9), (0.20, 1.75), (0.22, 1.65), (0.25, 1.5))
+    stair_dimensions = tuple(cfg.stair_dimensions)
+    stair_height_range = tuple(cfg.stair_height_range)
     for name in ("pyramid_stairs", "pyramid_stairs_inv"):
         base = terrain.sub_terrains.pop(name)
         for index, (width, border_width) in enumerate(stair_dimensions):
             terrain.sub_terrains[f"{name}_{index}"] = replace(
-                base, step_height_range=(0.05, 0.18), step_width=width,
+                base, step_height_range=stair_height_range, step_width=width,
                 border_width=border_width, platform_width=2.499999, holes=False, proportion=0.05,
             )
     terrain.sub_terrains["flat"].proportion = 0.06941176470588235

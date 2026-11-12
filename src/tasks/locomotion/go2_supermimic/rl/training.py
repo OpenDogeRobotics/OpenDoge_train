@@ -41,9 +41,9 @@ def _integer(value, minimum: int, name: str) -> None:
         raise ValueError(f"{name} must be an integer >= {minimum}")
 
 
-def _validate_arguments(task_id: str, args: SuperMimicTrainConfig) -> None:
-    if task_id not in TASK_MODES:
-        raise ValueError(f"Unknown Go2 SuperMimic task: {task_id}")
+def _validate_arguments(task_id: str, args: SuperMimicTrainConfig, task_modes=TASK_MODES) -> None:
+    if task_id not in task_modes:
+        raise ValueError(f"Unknown SuperMimic task: {task_id}")
     for name in ("max_iterations", "save_interval", "log_interval"):
         value = getattr(args, name)
         if value is not None:
@@ -77,7 +77,8 @@ def _validate_arguments(task_id: str, args: SuperMimicTrainConfig) -> None:
         raise ValueError("Distributed SuperMimic training is not supported; WORLD_SIZE must be 1")
 
 
-def _resolve_task_config(task_id: str, args: SuperMimicTrainConfig):
+def _resolve_task_config(task_id: str, args: SuperMimicTrainConfig, task_modes=TASK_MODES,
+                         configuration_factory=configuration_for_settings):
     resume = Path(args.resume).expanduser().resolve() if args.resume is not None else None
     if resume is not None and not resume.is_file():
         raise FileNotFoundError(f"Checkpoint file not found: {resume}")
@@ -87,13 +88,13 @@ def _resolve_task_config(task_id: str, args: SuperMimicTrainConfig):
         if not source.is_file():
             raise FileNotFoundError(f"Resume requires {source} or an explicit --task-config")
     settings, snapshot = _read_settings(source) if source is not None else ({}, False)
-    cfg = configuration_for_settings(settings)
+    cfg = configuration_factory(settings)
     if source is not None:
         sections = set(cfg.to_dict()) - {"init_member_classes", "to_dict"}
         # 完整快照可能主动删去地形家族等字典键，恢复时不得补回默认内容。
         complete = snapshot or sections.issubset(settings)
         _apply_settings(cfg, settings, replace_mappings=complete)
-    cfg.terrain.mode = TASK_MODES[task_id]
+    cfg.terrain.mode = task_modes[task_id]
     for field, value in (("num_envs", args.num_envs), ("seed", args.seed)):
         if value is not None:
             setattr(cfg.env, field, value)
@@ -147,11 +148,17 @@ def _run_origin(task_id: str, args: SuperMimicTrainConfig, device: str, resume: 
             "workspace": workspace}
 
 
-def launch_training(task_id: str, args: SuperMimicTrainConfig) -> Path:
-    """调用既有runner训练至目标轮次，周期保存模型和ONNX并返回独立产物目录。"""
+def launch_training(task_id: str, args: SuperMimicTrainConfig, *, task_modes=TASK_MODES,
+                    configuration_factory=configuration_for_settings, runner_factory=None) -> Path:
+    """调用既有runner训练至目标轮次，周期保存模型和ONNX并返回独立产物目录。
+
+    跨机器人任务通过task_modes/configuration_factory/runner_factory注入身份；
+    默认参数保持Go2行为不变。
+    """
+    runner_factory = runner_factory if runner_factory is not None else make_go2_supermimic_runner
     entry_started = time.perf_counter()
-    _validate_arguments(task_id, args)
-    cfg, resume, source = _resolve_task_config(task_id, args)
+    _validate_arguments(task_id, args, task_modes)
+    cfg, resume, source = _resolve_task_config(task_id, args, task_modes, configuration_factory)
     runtime = cfg.runner
     device = _resolve_device(args.device)
     if torch.device(device).type == "cuda":
@@ -172,7 +179,7 @@ def launch_training(task_id: str, args: SuperMimicTrainConfig) -> Path:
     initialized = training_completed = False
     starting_steps = starting_iteration = starting_prefill_steps = 0
     try:
-        runner = make_go2_supermimic_runner(cfg, device=device, log_dir=log_dir, execution=execution)
+        runner = runner_factory(cfg, device=device, log_dir=log_dir, execution=execution)
         timing, execution = runner.timing, runner.execution
         if torch.device(device).type == "cuda":
             torch.cuda.synchronize(device)

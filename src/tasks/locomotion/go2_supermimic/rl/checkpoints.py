@@ -36,10 +36,11 @@ class PlaybackSource:
     snapshot: dict
 
 
-def load_playback_source(task_id: str, checkpoint_file: str | Path) -> PlaybackSource:
+def load_playback_source(task_id: str, checkpoint_file: str | Path, *, task_modes=TASK_MODES,
+                         configuration_factory=configuration_for_settings) -> PlaybackSource:
     """读取可信本项目检查点及同目录的完整任务快照，不创建仿真。"""
-    if task_id not in TASK_MODES:
-        raise ValueError(f"Unknown Go2 SuperMimic task: {task_id}")
+    if task_id not in task_modes:
+        raise ValueError(f"Unknown SuperMimic task: {task_id}")
     path = Path(checkpoint_file).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Checkpoint file not found: {path}")
@@ -50,13 +51,13 @@ def load_playback_source(task_id: str, checkpoint_file: str | Path) -> PlaybackS
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     if any(not isinstance(snapshot.get(name), str) or not snapshot[name] for name in ("spec_hash", "geometry_hash")):
         raise ValueError("Task snapshot is missing spec_hash or geometry_hash metadata")
-    cfg = configuration_for_settings(settings)
+    cfg = configuration_factory(settings)
     sections = set(cfg.to_dict()) - {"init_member_classes", "to_dict"}
     if not sections.issubset(settings):
         raise ValueError("Playback requires all task configuration sections")
     apply_settings(cfg, settings, replace_mappings=True)
     validate_config(cfg)
-    if cfg.terrain.mode != TASK_MODES[task_id]:
+    if cfg.terrain.mode != task_modes[task_id]:
         raise ValueError("Playback task terrain mode differs from the saved configuration")
     # 与训练保持相同的可信文件约定；只把所需策略装配到目标设备。
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
